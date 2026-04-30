@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Google DriveのSCOREフォルダからCSVをダウンロードするスクリプト
-"""
 import os, json, sys
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -10,7 +6,6 @@ from google.oauth2 import service_account
 import io
 
 def main():
-    # 環境変数から認証情報を取得
     creds_json = os.environ.get('GDRIVE_CREDENTIALS', '')
     folder_id = os.environ.get('GDRIVE_FOLDER_ID', '')
 
@@ -18,7 +13,6 @@ def main():
         print("[ERROR] GDRIVE_CREDENTIALS or GDRIVE_FOLDER_ID not set")
         sys.exit(1)
 
-    # 認証
     creds_dict = json.loads(creds_json)
     creds = service_account.Credentials.from_service_account_info(
         creds_dict,
@@ -26,12 +20,10 @@ def main():
     )
     service = build('drive', 'v3', credentials=creds)
 
-    # 出力フォルダ作成
     os.makedirs('score_data', exist_ok=True)
 
-    # SCOREフォルダ内のCSVを一覧取得
     results = service.files().list(
-        q=f"'{folder_id}' in parents and mimeType='text/csv' and trashed=false",
+        q="'" + folder_id + "' in parents and mimeType='text/csv' and trashed=false",
         fields="files(id, name)",
         pageSize=100
     ).execute()
@@ -43,7 +35,6 @@ def main():
 
     print("Found " + str(len(files)) + " CSV files")
 
-    # 各CSVをダウンロード
     for file in files:
         file_id = file['id']
         file_name = file['name']
@@ -58,7 +49,7 @@ def main():
 
         with open(output_path, 'wb') as f:
             f.write(fh.getvalue())
-        print("  Downloaded: " + file_name)
+        print("Downloaded: " + file_name)
 
     print("Done!")
 
