@@ -1,0 +1,38 @@
+name: Update Mahjong Dashboard
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install google-api-python-client google-auth
+
+      - name: Download CSVs from Google Drive
+        env:
+          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: python scripts/download_csv.py
+
+      - name: Generate dashboard
+        run: python scripts/generate_dashboard.py score_data/ mahjong_dashboard.html
+
+      - name: Commit and push
+        run: |
+          git config user.name "Dashboard Bot"
+          git config user.email "bot@example.com"
+          git add mahjong_dashboard.html
+          git diff --staged --quiet || git commit -m "Auto update dashboard"
+          git push
