@@ -47,18 +47,37 @@ def parse_csv_files(score_dir):
 
                 for date, date_rows in date_groups.items():
                     scores, payouts, chips_list = [], [], []
-                    # 局ごとの順位集計 {player: {1:0,2:0,3:0,4:0}}
+                    # 局ごとの順位・飛び集計
                     game_ranks = {p: {1:0,2:0,3:0,4:0} for p in players}
+                    game_tobi = {p: 0 for p in players}
                     for row in date_rows:
-                        # 各局の点数を取得して順位を決定
                         game_scores = {}
                         for p in players:
                             sk = key_map[p].get('score', '')
+                            pk2 = key_map[p].get('score', '')
+                            # 点数（スコアではなく元の点数）で飛びを判定
+                            score_key = ''
+                            for h in reader.fieldnames or []:
+                                if h.strip() == p + ' 点数':
+                                    score_key = h
+                                    break
                             try:
                                 sv = float(row.get(sk, '') or 0)
                                 game_scores[p] = sv
                             except:
                                 game_scores[p] = 0
+                            # 点数がマイナスなら飛び
+                            try:
+                                pts_key = ''
+                                for h in (reader.fieldnames or []):
+                                    if h.strip() == p + ' 点数':
+                                        pts_key = h
+                                        break
+                                pts = float(row.get(pts_key, '') or 0)
+                                if pts < 0:
+                                    game_tobi[p] += 1
+                            except:
+                                pass
                         sorted_players = sorted(game_scores.keys(), key=lambda p: game_scores[p], reverse=True)
                         for rank_i, p in enumerate(sorted_players):
                             game_ranks[p][rank_i+1] += 1
@@ -86,7 +105,8 @@ def parse_csv_files(score_dir):
                         'date': date, 'players': players[:],
                         'scores': scores, 'payouts': payouts,
                         'chips': chips_list, 'games': len(date_rows),
-                        'game_ranks': {p: game_ranks[p] for p in players}
+                        'game_ranks': {p: game_ranks[p] for p in players},
+                        'game_tobi': {p: game_tobi[p] for p in players}
                     })
         except Exception as e:
             print(f"警告: {filepath}: {e}", file=sys.stderr)
@@ -231,6 +251,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
         <div class="section"><div class="grid2" id="detail-metrics"></div></div>
         <div class="section"><div class="section-title">対戦成績詳細</div><div id="detail-stats"></div></div>
         <div class="section"><div class="section-title">収支の累計推移</div><div class="chart-wrap"><canvas id="detailChart"></canvas></div></div>
+        <div class="section"><div class="section-title">年度別収支</div><div id="detail-yearly"></div></div>
       </div>
     </div>
     <div id="page-trend" class="page">
@@ -258,14 +279,14 @@ const allData=""")
     html_parts.append(sessions_json)
     html_parts.append(""";
 
-const playerTotals={},playerGames={},playerSessions={},playerRanks={},playerRankSum={},playerSessionCount={},playerChips={},playerGameRanks={};
+const playerTotals={},playerGames={},playerSessions={},playerRanks={},playerRankSum={},playerSessionCount={},playerChips={},playerGameRanks={},playerTobi={};
 allData.forEach(function(sess){
   var sorted=sess.scores.slice().sort(function(a,b){return b-a;});
   sess.players.forEach(function(p,i){
     if(!playerTotals[p]){
       playerTotals[p]=0;playerGames[p]=0;playerSessions[p]=[];
       playerRanks[p]={1:0,2:0,3:0,4:0};playerRankSum[p]=0;playerSessionCount[p]=0;
-      playerChips[p]=0;playerGameRanks[p]={1:0,2:0,3:0,4:0};
+      playerChips[p]=0;playerGameRanks[p]={1:0,2:0,3:0,4:0};playerTobi[p]=0;
     }
     playerTotals[p]+=sess.payouts[i];
     playerGames[p]+=sess.games;
@@ -282,6 +303,10 @@ allData.forEach(function(sess){
       for(var r=1;r<=4;r++){
         playerGameRanks[p][r]+=(gr[r]||0);
       }
+    }
+    // 飛び回数を集計
+    if(sess.game_tobi&&sess.game_tobi[p]){
+      playerTobi[p]+=(sess.game_tobi[p]||0);
     }
   });
 });
@@ -305,6 +330,7 @@ function fmtS(n){ return (n>=0?'+':'')+n; }
 function avgRank(p){ return (playerRankSum[p]/playerSessionCount[p]).toFixed(2); }
 function rankRate(p,r){ return Math.round((playerRanks[p][r]||0)/playerSessionCount[p]*100); }
 function gameRankRate(p,r){ return playerGames[p]>0?Math.round((playerGameRanks[p][r]||0)/playerGames[p]*100):0; }
+function tobiRate(p){ return playerGames[p]>0?Math.round((playerTobi[p]||0)/playerGames[p]*100):0; }
 function col(p){ return COLORS[p]||'#888888'; }
 
 function showPage(name,btn){
@@ -356,7 +382,9 @@ function showDetail(player){
     '<div class="stat-row"><span class="stat-label">🥈 2位獲得率</span><span class="stat-val">'+gameRankRate(player,2)+'%（'+gr[2]+'局）</span></div>'+
     '<div class="stat-row"><span class="stat-label">🥉 3位獲得率</span><span class="stat-val">'+gameRankRate(player,3)+'%（'+gr[3]+'局）</span></div>'+
     '<div class="stat-row"><span class="stat-label">💀 4位獲得率</span><span class="stat-val">'+gameRankRate(player,4)+'%（'+gr[4]+'局）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">累計チップ</span><span class="stat-val '+(playerChips[player]>=0?'pos':'neg')+'">'+playerChips[player]+'枚</span></div>';
+    '<div class="stat-row"><span class="stat-label">累計チップ</span><span class="stat-val '+(playerChips[player]>=0?'pos':'neg')+'">'+playerChips[player]+'枚</span></div>'+
+    '<div class="stat-row" style="margin-top:6px;font-weight:600;color:var(--text3);font-size:11px;letter-spacing:0.06em">TOBI</div>'+
+    '<div class="stat-row"><span class="stat-label">💀 飛び率</span><span class="stat-val neg">'+tobiRate(player)+'%（'+playerTobi[player]+'回 / '+playerGames[player]+'局）</span></div>';
   var ctx=document.getElementById('detailChart').getContext('2d');
   if(window._dc) window._dc.destroy();
   var acc=0;
@@ -369,6 +397,27 @@ function showDetail(player){
     },
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return v.toLocaleString();}}}}}
   });
+
+  // 年度別収支
+  var yearlyHtml='';
+  var totalCheck=0;
+  for(var yi=0;yi<years.length;yi++){
+    var year=years[yi];
+    if(!yearlyData[year]||yearlyData[year][player]===undefined) continue;
+    var val=yearlyData[year][player];
+    totalCheck+=val;
+    var tc=val>=0?'var(--green)':'var(--red)';
+    var barW=Math.min(100,Math.abs(val)/Math.max.apply(null,years.map(function(y){return Math.abs(yearlyData[y]&&yearlyData[y][player]?yearlyData[y][player]:0)||1;}))*100);
+    yearlyHtml+='<div style="margin-bottom:10px;">';
+    yearlyHtml+='<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">';
+    yearlyHtml+='<span style="font-weight:600;color:var(--text2)">'+year+'年</span>';
+    yearlyHtml+='<span style="font-weight:600;color:'+tc+'">'+fmt(val)+'円</span>';
+    yearlyHtml+='</div>';
+    yearlyHtml+='<div style="height:8px;border-radius:4px;background:var(--bg3);overflow:hidden;">';
+    yearlyHtml+='<div style="height:100%;width:'+barW+'%;border-radius:4px;background:'+tc+';"></div>';
+    yearlyHtml+='</div></div>';
+  }
+  document.getElementById('detail-yearly').innerHTML=yearlyHtml;
 }
 
 function renderRanking(){
@@ -470,7 +519,7 @@ function renderStats(){
     html+='<div class="rank-row">';
     html+='<div class="rank-num '+rc+'">'+(i+1)+'</div>';
     html+='<div class="rank-avatar" style="background:'+col(p)+'22;color:'+col(p)+'">'+p[0]+'</div>';
-    html+='<div class="rank-info"><div class="rank-name">'+p+'</div><div class="rank-detail">🥇'+rankRate(p,1)+'% 🥈'+rankRate(p,2)+'% 🥉'+rankRate(p,3)+'% 💀'+rankRate(p,4)+'% · 平均'+avgRank(p)+'位</div></div>';
+    html+='<div class="rank-info"><div class="rank-name">'+p+'</div><div class="rank-detail">🥇'+rankRate(p,1)+'% 🥈'+rankRate(p,2)+'% 🥉'+rankRate(p,3)+'% 💀'+rankRate(p,4)+'% · 飛'+tobiRate(p)+'%</div></div>';
     html+='<div class="rank-score"><div class="rank-score-val" style="color:'+tc+'">'+fmt(playerTotals[p])+'</div><div class="rank-score-sub">円</div></div>';
     html+='</div>';
   }
