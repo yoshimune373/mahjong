@@ -47,6 +47,22 @@ def parse_csv_files(score_dir):
 
                 for date, date_rows in date_groups.items():
                     scores, payouts, chips_list = [], [], []
+                    # 局ごとの順位集計 {player: {1:0,2:0,3:0,4:0}}
+                    game_ranks = {p: {1:0,2:0,3:0,4:0} for p in players}
+                    for row in date_rows:
+                        # 各局の点数を取得して順位を決定
+                        game_scores = {}
+                        for p in players:
+                            sk = key_map[p].get('score', '')
+                            try:
+                                sv = float(row.get(sk, '') or 0)
+                                game_scores[p] = sv
+                            except:
+                                game_scores[p] = 0
+                        sorted_players = sorted(game_scores.keys(), key=lambda p: game_scores[p], reverse=True)
+                        for rank_i, p in enumerate(sorted_players):
+                            game_ranks[p][rank_i+1] += 1
+
                     for p in players:
                         s_sum = p_sum = c_sum = 0
                         sk = key_map[p].get('score', '')
@@ -69,7 +85,8 @@ def parse_csv_files(score_dir):
                     sessions.append({
                         'date': date, 'players': players[:],
                         'scores': scores, 'payouts': payouts,
-                        'chips': chips_list, 'games': len(date_rows)
+                        'chips': chips_list, 'games': len(date_rows),
+                        'game_ranks': {p: game_ranks[p] for p in players}
                     })
         except Exception as e:
             print(f"警告: {filepath}: {e}", file=sys.stderr)
@@ -200,6 +217,7 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
     <button class="tab active" onclick="showPage('ranking',this)">ランキング</button>
     <button class="tab" onclick="showPage('trend',this)">推移</button>
     <button class="tab" onclick="showPage('stats',this)">統計</button>
+    <button class="tab" onclick="showPage('yearly',this)">年度別</button>
     <button class="tab" onclick="showPage('history',this)">履歴</button>
   </div>
   <div class="content">
@@ -225,6 +243,10 @@ body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background
       <div class="section"><div class="section-title">順位獲得率（積み上げ）</div><div class="chart-wrap" style="height:220px"><canvas id="winChart"></canvas></div></div>
       <div class="section"><div class="section-title">平均順位（低いほど良い）</div><div class="chart-wrap" style="height:220px"><canvas id="avgRankChart"></canvas></div></div>
     </div>
+    <div id="page-yearly" class="page">
+      <div class="section"><div class="section-title">年度別収支</div><div id="yearly-content"></div></div>
+      <div class="section"><div class="section-title">年度別収支グラフ</div><div class="chart-wrap" style="height:280px"><canvas id="yearlyChart"></canvas></div></div>
+    </div>
     <div id="page-history" class="page">
       <div class="section"><div class="section-title">対戦履歴（新しい順）</div><div class="history-list" id="history-list"></div></div>
     </div>
@@ -236,13 +258,14 @@ const allData=""")
     html_parts.append(sessions_json)
     html_parts.append(""";
 
-const playerTotals={},playerGames={},playerSessions={},playerRanks={},playerRankSum={},playerSessionCount={},playerChips={};
+const playerTotals={},playerGames={},playerSessions={},playerRanks={},playerRankSum={},playerSessionCount={},playerChips={},playerGameRanks={};
 allData.forEach(function(sess){
   var sorted=sess.scores.slice().sort(function(a,b){return b-a;});
   sess.players.forEach(function(p,i){
     if(!playerTotals[p]){
       playerTotals[p]=0;playerGames[p]=0;playerSessions[p]=[];
-      playerRanks[p]={1:0,2:0,3:0,4:0};playerRankSum[p]=0;playerSessionCount[p]=0;playerChips[p]=0;
+      playerRanks[p]={1:0,2:0,3:0,4:0};playerRankSum[p]=0;playerSessionCount[p]=0;
+      playerChips[p]=0;playerGameRanks[p]={1:0,2:0,3:0,4:0};
     }
     playerTotals[p]+=sess.payouts[i];
     playerGames[p]+=sess.games;
@@ -253,15 +276,35 @@ allData.forEach(function(sess){
     var rank=sorted.indexOf(sess.scores[i])+1;
     if(playerRanks[p][rank]!==undefined) playerRanks[p][rank]++;
     playerRankSum[p]+=rank;
+    // 局ごとの順位を集計
+    if(sess.game_ranks&&sess.game_ranks[p]){
+      var gr=sess.game_ranks[p];
+      for(var r=1;r<=4;r++){
+        playerGameRanks[p][r]+=(gr[r]||0);
+      }
+    }
   });
 });
 
 var players=Object.keys(playerTotals).sort(function(a,b){return playerTotals[b]-playerTotals[a];});
 
+// 年度別収支集計
+var yearlyData={};
+allData.forEach(function(sess){
+  var year=sess.date.slice(0,4);
+  if(!yearlyData[year]) yearlyData[year]={};
+  sess.players.forEach(function(p,i){
+    if(!yearlyData[year][p]) yearlyData[year][p]=0;
+    yearlyData[year][p]+=sess.payouts[i];
+  });
+});
+var years=Object.keys(yearlyData).sort();
+
 function fmt(n){ return (n>=0?'+':'')+n.toLocaleString(); }
 function fmtS(n){ return (n>=0?'+':'')+n; }
 function avgRank(p){ return (playerRankSum[p]/playerSessionCount[p]).toFixed(2); }
 function rankRate(p,r){ return Math.round((playerRanks[p][r]||0)/playerSessionCount[p]*100); }
+function gameRankRate(p,r){ return playerGames[p]>0?Math.round((playerGameRanks[p][r]||0)/playerGames[p]*100):0; }
 function col(p){ return COLORS[p]||'#888888'; }
 
 function showPage(name,btn){
@@ -271,6 +314,7 @@ function showPage(name,btn){
   btn.classList.add('active');
   if(name==='trend') renderTrend();
   if(name==='stats') renderStats();
+  if(name==='yearly') renderYearly();
   if(name==='history') renderHistory();
 }
 
@@ -296,15 +340,22 @@ function showDetail(player){
   var worst=Math.min.apply(null,payouts);
   var scoreSum=sessions.reduce(function(a,s){return a+s.score;},0);
   var r=playerRanks[player];
+  var gr=playerGameRanks[player];
   document.getElementById('detail-stats').innerHTML=
     '<div class="stat-row"><span class="stat-label">総プレイ対局数</span><span class="stat-val">'+playerGames[player]+'局</span></div>'+
     '<div class="stat-row"><span class="stat-label">累計スコア合計</span><span class="stat-val">'+fmtS(scoreSum)+'</span></div>'+
     '<div class="stat-row"><span class="stat-label">最高収支セッション</span><span class="stat-val pos">'+fmt(best)+'円</span></div>'+
     '<div class="stat-row"><span class="stat-label">最低収支セッション</span><span class="stat-val neg">'+fmt(worst)+'円</span></div>'+
+    '<div class="stat-row" style="margin-top:6px;font-weight:600;color:var(--text3);font-size:11px;letter-spacing:0.06em">SESSION RANK</div>'+
     '<div class="stat-row"><span class="stat-label">🥇 1位獲得率</span><span class="stat-val">'+rankRate(player,1)+'%（'+r[1]+'回）</span></div>'+
     '<div class="stat-row"><span class="stat-label">🥈 2位獲得率</span><span class="stat-val">'+rankRate(player,2)+'%（'+r[2]+'回）</span></div>'+
     '<div class="stat-row"><span class="stat-label">🥉 3位獲得率</span><span class="stat-val">'+rankRate(player,3)+'%（'+r[3]+'回）</span></div>'+
     '<div class="stat-row"><span class="stat-label">💀 4位獲得率</span><span class="stat-val">'+rankRate(player,4)+'%（'+r[4]+'回）</span></div>'+
+    '<div class="stat-row" style="margin-top:6px;font-weight:600;color:var(--text3);font-size:11px;letter-spacing:0.06em">GAME RANK（対局単位）</div>'+
+    '<div class="stat-row"><span class="stat-label">🥇 1位獲得率</span><span class="stat-val">'+gameRankRate(player,1)+'%（'+gr[1]+'局）</span></div>'+
+    '<div class="stat-row"><span class="stat-label">🥈 2位獲得率</span><span class="stat-val">'+gameRankRate(player,2)+'%（'+gr[2]+'局）</span></div>'+
+    '<div class="stat-row"><span class="stat-label">🥉 3位獲得率</span><span class="stat-val">'+gameRankRate(player,3)+'%（'+gr[3]+'局）</span></div>'+
+    '<div class="stat-row"><span class="stat-label">💀 4位獲得率</span><span class="stat-val">'+gameRankRate(player,4)+'%（'+gr[4]+'局）</span></div>'+
     '<div class="stat-row"><span class="stat-label">累計チップ</span><span class="stat-val '+(playerChips[player]>=0?'pos':'neg')+'">'+playerChips[player]+'枚</span></div>';
   var ctx=document.getElementById('detailChart').getContext('2d');
   if(window._dc) window._dc.destroy();
@@ -476,6 +527,57 @@ function renderStats(){
     chipHtml+='</div></div>';
   }
   document.getElementById('chip-stats').innerHTML=chipHtml;
+}
+
+function renderYearly(){
+  // 年度別ランキングテーブル
+  var html='';
+  for(var yi=0;yi<years.length;yi++){
+    var year=years[yi];
+    var ydata=yearlyData[year];
+    var yplayers=Object.keys(ydata).sort(function(a,b){return ydata[b]-ydata[a];});
+    html+='<div style="margin-bottom:1.5rem;">';
+    html+='<div style="font-size:13px;font-weight:600;color:var(--text3);letter-spacing:0.06em;margin-bottom:8px;">'+year+'年</div>';
+    for(var pi=0;pi<yplayers.length;pi++){
+      var p=yplayers[pi];
+      var val=ydata[p];
+      var tc=val>=0?'var(--green)':'var(--red)';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:13px;">';
+      html+='<span style="display:flex;align-items:center;gap:8px;">';
+      html+='<span style="width:28px;height:28px;border-radius:50%;background:'+col(p)+'22;color:'+col(p)+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">'+p[0]+'</span>';
+      html+='<span style="font-weight:600;color:var(--text)">'+p+'</span></span>';
+      html+='<span style="font-weight:600;color:'+tc+'">'+fmt(val)+'円</span>';
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+  document.getElementById('yearly-content').innerHTML=html;
+
+  // 年度別グラフ
+  var ctx=document.getElementById('yearlyChart').getContext('2d');
+  if(window._yc) window._yc.destroy();
+  window._yc=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:years.map(function(y){return y+'年';}),
+      datasets:players.map(function(p){
+        return{
+          label:p,
+          data:years.map(function(y){return yearlyData[y]&&yearlyData[y][p]?yearlyData[y][p]:0;}),
+          backgroundColor:col(p)+'99',
+          borderRadius:4
+        };
+      })
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{stacked:false},
+        y:{ticks:{callback:function(v){return v.toLocaleString();}}}
+      }
+    }
+  });
 }
 
 function renderHistory(){
