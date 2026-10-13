@@ -264,6 +264,39 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku
 .bar-row{margin-bottom:10px;}
 .bar-row .top-line{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;font-weight:700;}
 .year-block{margin-bottom:20px;}
+.matrix-wrap{overflow-x:auto;margin:0 -4px;}
+.matrix{border-collapse:separate;border-spacing:2px;font-size:11px;margin:0 auto;}
+.matrix th{font-weight:700;color:var(--text2);padding:2px;white-space:nowrap;}
+.matrix thead th{writing-mode:vertical-rl;text-orientation:upright;height:44px;vertical-align:bottom;letter-spacing:-0.05em;}
+.matrix tbody th{text-align:right;padding-right:6px;}
+.matrix td{width:30px;height:34px;min-width:30px;text-align:center;border-radius:6px;cursor:pointer;line-height:1;}
+.matrix td .fe{display:block;font-size:16px;}
+.matrix td .fn{display:block;font-size:8px;color:var(--text2);margin-top:2px;font-variant-numeric:tabular-nums;}
+.face-legend{font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.8;}
+.awards{display:grid;grid-template-columns:1fr;gap:8px;}
+.award{border-radius:14px;padding:12px 14px;background:var(--bg2);position:relative;overflow:hidden;}
+.award .ic{font-size:26px;position:absolute;right:12px;top:10px;opacity:0.9;}
+.award .lb{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.04em;}
+.award .who{font-size:17px;font-weight:800;margin-top:4px;padding-right:36px;}
+.award .who .vs{font-size:12px;color:var(--text3);font-weight:600;margin:0 4px;}
+.award .cm{font-size:12px;color:var(--text2);margin-top:4px;line-height:1.6;}
+.award .st{font-size:11px;color:var(--text3);margin-top:6px;}
+.mini-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;}
+.mini{background:var(--bg2);border-radius:10px;padding:8px;text-align:center;}
+.mini .e{font-size:20px;}
+.mini .n{font-size:13px;font-weight:800;margin-top:2px;}
+.mini .r{font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums;}
+.aisho-group{font-size:12px;font-weight:700;margin:12px 0 6px;}
+details.more{margin-top:10px;}
+details.more summary{font-size:12px;color:var(--text2);cursor:pointer;padding:6px 0;}
+.matrix td.self{background:var(--bg3);cursor:default;}
+.matrix td.few{color:var(--text3);background:var(--bg2);font-weight:400;}
+.matrix td.sel{outline:2px solid var(--text);outline-offset:-1px;}
+.aisho-pick{margin-top:10px;padding:10px 12px;background:var(--bg2);border-radius:10px;font-size:13px;line-height:1.6;min-height:44px;color:var(--text2);}
+.aisho-pick b{color:var(--text);}
+.dv{position:relative;height:8px;border-radius:4px;background:var(--bg3);}
+.dv::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--border2);}
+.dv div{position:absolute;top:0;bottom:0;border-radius:4px;}
 .year-title{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:6px;}
 </style>
 </head>
@@ -281,6 +314,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku
       <button class="tab" data-page="trend">推移</button>
       <button class="tab" data-page="stats">統計</button>
       <button class="tab" data-page="yearly">年度別</button>
+      <button class="tab" data-page="aisho">相性</button>
       <button class="tab" data-page="history">履歴</button>
     </div>
   </div>
@@ -295,6 +329,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku
         <div class="section"><div class="section-title">直近10半荘の着順（右が最新）</div><div class="form" id="detail-form"></div></div>
         <div class="section"><div class="section-title">対戦成績詳細</div><div id="detail-stats"></div></div>
         <div class="section"><div class="section-title">収支の累計推移</div><div class="chart-wrap"><canvas id="detailChart"></canvas></div></div>
+        <div class="section"><div class="section-title"><span>🔮 相性診断</span></div><div id="detail-aisho"></div></div>
         <div class="section"><div class="section-title">年度別収支</div><div id="detail-yearly"></div></div>
       </div>
     </div>
@@ -336,6 +371,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku
       <div class="section"><div class="section-title">年度別収支</div><div id="yearly-content"></div></div>
     </div>
 
+    <div id="page-aisho" class="page">
+      <div class="section">
+        <div class="section-title"><span>🔮 今日の相性診断</span></div>
+        <div class="awards" id="aisho-awards"></div>
+      </div>
+      <div class="section">
+        <div class="section-title"><span>相性マップ</span><span class="hint">タップで詳しく</span></div>
+        <div class="face-legend">😎 カモにしてる　😊 得意　😐 互角　😓 ちょい苦手　😱 天敵</div>
+        <div class="matrix-wrap"><table class="matrix" id="aisho-matrix"></table></div>
+        <div class="aisho-pick" id="aisho-pick">👆 気になる組み合わせをタップ！（行の人から見た相性です）</div>
+        <p class="note" id="aisho-note"></p>
+      </div>
+      <div class="section"><div class="section-title"><span>🦆 天敵とお得意様の関係</span><span class="hint">同卓20局以上</span></div><div class="list" id="aisho-pairs"></div></div>
+    </div>
+
     <div id="page-history" class="page">
       <div class="section"><div class="section-title">対戦履歴（新しい順）</div><div class="list" id="history-list"></div></div>
     </div>
@@ -360,6 +410,13 @@ const P = {};
 function ensure(p) {
   return P[p] || (P[p] = {name: p, games: [], sessions: []});
 }
+// H[a][b]: aがbと同卓した半荘での成績（n=同卓数, win=aがbより上の回数, rsum=aの着順合計, pay=aの収支）
+const H = {};
+function pair(a, b) {
+  H[a] = H[a] || {};
+  return H[a][b] || (H[a][b] = {n: 0, win: 0, rsum: 0, pay: 0});
+}
+const PAIR_MIN = 10; // これ未満の同卓数は参考外
 function ranksOf(arr) { // 大きい順の順位（同点は同順位）
   return arr.map(v => 1 + arr.filter(x => x > v).length);
 }
@@ -372,6 +429,13 @@ DATA.forEach((s, si) => {
       pay[i] += g.pay[i]; sc[i] += g.sc[i];
       ensure(p).games.push({si, date: s.date, rank: rk[i], sc: g.sc[i], pay: g.pay[i],
         chip: gi === 0 ? s.chips[i] : 0, tobi: g.pt[i] < 0 ? 1 : 0});
+      // 相性：同卓した相手ごとの対戦成績
+      s.players.forEach((q, j) => {
+        if (i === j) return;
+        const h = pair(p, q);
+        h.n++; h.rsum += rk[i]; h.pay += g.pay[i];
+        h.win += g.sc[i] > g.sc[j] ? 1 : g.sc[i] === g.sc[j] ? 0.5 : 0;
+      });
     });
   });
   s.pay = pay; s.sc = sc.map(v => Math.round(v * 10) / 10);
@@ -437,7 +501,7 @@ function showPage(name) {
   document.querySelectorAll('.page').forEach(el => el.classList.toggle('show', el.id === 'page-' + name));
   document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.page === name));
   if (name === 'ranking') showOverview();
-  const fn = {recent: renderRecent, trend: renderTrend, stats: renderStats, yearly: renderYearly, history: renderHistory}[name];
+  const fn = {recent: renderRecent, trend: renderTrend, stats: renderStats, yearly: renderYearly, aisho: renderAisho, history: renderHistory}[name];
   if (fn && !rendered[name]) { fn(); rendered[name] = true; }
   window.scrollTo(0, 0);
 }
@@ -513,6 +577,7 @@ function showDetail(p) {
   });
 
   const y = byYear(ss);
+  document.getElementById('detail-aisho').innerHTML = aishoRows(p);
   document.getElementById('detail-yearly').innerHTML = barRows(Object.keys(y).sort().map(k => ({label: k + '年', v: y[k], text: yen(y[k]) + '円'})));
 }
 
@@ -646,6 +711,158 @@ function renderStats() {
     options: {responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: {legend: {display: false}}, scales: {x: {min: 1, max: 4, ticks: {callback: v => v + '位'}}}}
   });
 }
+
+// ---------- 相性 ----------
+const winRate = h => h.n ? h.win / h.n : 0;
+const FACES = [[0.65, '😎', 'カモにしてる'], [0.56, '😊', '得意'], [0.445, '😐', '互角'], [0.35, '😓', 'ちょい苦手'], [-1, '😱', '天敵']];
+const face = w => FACES.find(f => w >= f[0]);
+function aishoColor(w) { // 50%を中心に緑（得意）/赤（苦手）。顔文字が読めるよう薄めに
+  const a = Math.min(1, Math.abs(w - 0.5) / 0.25);
+  const hex = Math.round(0x14 + a * (0x66 - 0x14)).toString(16).padStart(2, '0');
+  return css(w >= 0.5 ? '--green' : '--red') + hex;
+}
+// 名前の組み合わせで決まる擬似乱数（再読み込みしてもコメントが変わらないように）
+function seedOf(s) { let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)) >>> 0; return h; }
+const pick = (arr, key) => arr[seedOf(key) % arr.length];
+const san = p => esc(p) + 'さん';
+// g が l より上になりやすい関係へのひとこと
+function quip(g, l, w) {
+  const G = san(g), L = san(l);
+  const t = w >= 0.68 ? [
+    L + '、' + G + 'の前だと借りてきた猫🐱',
+    G + 'にとって' + L + 'との卓はボーナスステージ🎰',
+    L + 'の点棒、' + G + 'の財布に直行中💸',
+    G + 'が' + L + 'を見つけると目の色が変わる👀',
+  ] : w >= 0.6 ? [
+    G + '、' + L + 'と同卓だとちょっとニヤけてる説',
+    L + '、そろそろ' + G + '対策を練るべき🤔',
+    G + 'の機嫌が良い日は、だいたい' + L + 'がいる',
+    L + '、' + G + 'の待ちだけは読めない模様',
+  ] : [
+    G + 'がわずかにリード。まだまだ逆転ある！',
+    'ほぼ互角だけど、' + G + 'がちょっとだけ上手',
+  ];
+  return pick(t, g + l);
+}
+function opponents(p, min) {
+  return Object.keys(H[p] || {}).map(q => ({q, h: H[p][q], w: winRate(H[p][q])})).filter(o => o.h.n >= (min || PAIR_MIN));
+}
+function allPairs(min) {
+  const list = [];
+  Object.keys(H).forEach(a => Object.keys(H[a]).forEach(b => {
+    if (a < b && H[a][b].n >= min) list.push({a, b, h: H[a][b], w: winRate(H[a][b])});
+  }));
+  return list;
+}
+function award(icon, label, who, comment, stat) {
+  return '<div class="award"><div class="ic">' + icon + '</div><div class="lb">' + label + '</div><div class="who">' + who + '</div>' +
+    '<div class="cm">' + comment + '</div><div class="st num">' + stat + '</div></div>';
+}
+const nm = p => '<span style="color:' + col(p) + '">' + esc(p) + '</span>';
+
+// 個人画面：お得意様・天敵・ライバルのカード＋全員との相性（折りたたみ）
+function aishoRows(p) {
+  const ok = opponents(p).sort((a, b) => b.w - a.w);
+  const few = Object.keys(H[p] || {}).filter(q => H[p][q].n < PAIR_MIN);
+  if (!ok.length) return '<p class="note">同卓' + PAIR_MIN + '局以上の相手がまだいません。もっと打ちましょう🀄</p>';
+  const best = ok[0], worst = ok[ok.length - 1];
+  const rival = ok.slice().sort((a, b) => (Math.abs(a.w - 0.5) - Math.abs(b.w - 0.5)) || (b.h.n - a.h.n))[0];
+  const mini = (e, label, o) => '<div class="mini"><div class="e">' + e + '</div><div class="r">' + label + '</div><div class="n">' + nm(o.q) + '</div><div class="r">' + Math.round(o.w * 100) + '% · ' + o.h.n + '局</div></div>';
+  let html = '<div class="mini-cards">' + mini('🦆', 'お得意様', best) + mini('😱', '天敵', worst) + mini('⚔️', 'ライバル', rival) + '</div>';
+  html += '<p class="note" style="margin-top:0">' + (best.w > 0.55 ? '・' + quip(p, best.q, best.w) + '<br>' : '') +
+    (worst.w < 0.45 ? '・' + quip(worst.q, p, 1 - worst.w) : '') + '</p>';
+
+  const base = ALL[p].avg;
+  const rows = ok.map(o => {
+    const avg = o.h.rsum / o.h.n, diff = base - avg, f = face(o.w);
+    const left = o.w >= 0.5 ? 50 : o.w * 100, width = Math.abs(o.w - 0.5) * 100;
+    return '<div class="bar-row"><div class="top-line"><span>' + f[1] + ' ' + nm(o.q) +
+      ' <span style="color:var(--text3);font-weight:400;font-size:11px">' + o.h.n + '局 · 平均' + avg.toFixed(2) + '着（' + (diff >= 0 ? '+' : '−') + Math.abs(diff).toFixed(2) + '）· ' + yen(o.h.pay) + '円</span></span>' +
+      '<span class="num ' + (o.w > 0.5 ? 'pos' : o.w < 0.5 ? 'neg' : 'zero') + '">' + Math.round(o.w * 100) + '%</span></div>' +
+      '<div class="dv"><div style="left:' + left + '%;width:' + width + '%;background:var(--' + (o.w >= 0.5 ? 'green' : 'red') + ')"></div></div></div>';
+  }).join('');
+  html += '<details class="more"><summary>全員との相性を見る（' + ok.length + '人）</summary>' + rows +
+    '<p class="note">％は同じ卓で打った半荘のうち' + san(p) + 'が相手より上の着順だった割合（50%で互角）。カッコ内は通算の平均着順との差で、＋ならその相手がいると調子が良い。' +
+    (few.length ? '同卓' + PAIR_MIN + '局未満（' + few.map(esc).join('・') + '）は省略。' : '') + '</p></details>';
+  return html;
+}
+
+function renderAisho() {
+  const regs = players.filter(p => ALL[p].n >= 30).sort((a, b) => ALL[b].n - ALL[a].n);
+
+  // --- 診断カード ---
+  const cards = [];
+  const strong = allPairs(20).sort((x, y) => Math.abs(y.w - 0.5) - Math.abs(x.w - 0.5))[0];
+  if (strong) {
+    const [g, l, w] = strong.w >= 0.5 ? [strong.a, strong.b, strong.w] : [strong.b, strong.a, 1 - strong.w];
+    cards.push(award('😱', '最恐の天敵コンビ', nm(g) + '<span class="vs">→</span>' + nm(l), quip(g, l, w),
+      '同卓' + strong.h.n + '局で' + esc(g) + 'が上だったのは' + Math.round(w * strong.h.n) + '回（' + Math.round(w * 100) + '%）'));
+  }
+  const rival = allPairs(50).sort((x, y) => (Math.abs(x.w - 0.5) - Math.abs(y.w - 0.5)) || (y.h.n - x.h.n))[0];
+  if (rival) {
+    const wa = Math.round(rival.h.win), wb = rival.h.n - wa;
+    cards.push(award('⚔️', '宿命のライバル', nm(rival.a) + '<span class="vs">vs</span>' + nm(rival.b),
+      rival.h.n + '局戦ってもほぼ五分。決着の日は来るのか…', esc(rival.a) + 'が上 ' + wa + '回 / ' + esc(rival.b) + 'が上 ' + wb + '回'));
+  }
+  // 卓の支配者：勝ち越している相手の割合が最も高い人
+  const dom = regs.map(p => { const o = opponents(p); return {p, o, m: o.filter(x => x.w > 0.5).length}; })
+    .filter(x => x.o.length >= 4).sort((a, b) => (b.m / b.o.length - a.m / a.o.length) || (b.m - a.m))[0];
+  if (dom) cards.push(award('👑', '卓の支配者', nm(dom.p), '同卓した相手のほとんどに勝ち越し。この人がいる卓は覚悟して！',
+    dom.o.length + '人中' + dom.m + '人に勝ち越し'));
+  // みんなのお得意様：対戦相手から見た勝率（同卓数で加重）が最も高い人
+  const kamo = regs.map(p => {
+    const o = opponents(p); const n = o.reduce((s, x) => s + x.h.n, 0);
+    return {p, n, w: n ? o.reduce((s, x) => s + x.h.n * (1 - x.w), 0) / n : 0};
+  }).filter(x => x.n >= 50).sort((a, b) => b.w - a.w)[0];
+  if (kamo) cards.push(award('🦆', 'みんなのお得意様', nm(kamo.p), '卓に来てくれるとみんな笑顔に☺️ いつもありがとうございます！',
+    '同卓相手が' + esc(kamo.p) + 'より上だった割合 平均' + Math.round(kamo.w * 100) + '%'));
+  // ラッキーパーソン：その人がいると平均着順が一番良くなる組み合わせ
+  let lucky = null;
+  regs.forEach(p => opponents(p, 20).forEach(o => {
+    const d = ALL[p].avg - o.h.rsum / o.h.n;
+    if (!lucky || d > lucky.d) lucky = {p, q: o.q, d, n: o.h.n};
+  }));
+  if (lucky && lucky.d > 0.1) cards.push(award('🍀', 'ラッキーパーソン', nm(lucky.p) + '<span class="vs">にとっての</span>' + nm(lucky.q),
+    san(lucky.q) + 'がいると' + san(lucky.p) + 'の調子が上がる！ 次も誘いましょう', '同卓' + lucky.n + '局で平均着順が' + lucky.d.toFixed(2) + '良くなる'));
+  document.getElementById('aisho-awards').innerHTML = cards.join('');
+
+  // --- 相性マップ ---
+  let t = '<thead><tr><th></th>' + regs.map(q => '<th style="color:' + col(q) + '">' + esc(q) + '</th>').join('') + '</tr></thead><tbody>';
+  regs.forEach(p => {
+    t += '<tr><th style="color:' + col(p) + '">' + esc(p) + '</th>';
+    regs.forEach(q => {
+      if (p === q) { t += '<td class="self"></td>'; return; }
+      const h = (H[p] || {})[q];
+      if (!h || h.n < PAIR_MIN) { t += '<td class="few" data-a="' + esc(p) + '" data-b="' + esc(q) + '">' + (h ? '·' : '') + '</td>'; return; }
+      const w = winRate(h);
+      t += '<td data-a="' + esc(p) + '" data-b="' + esc(q) + '" style="background:' + aishoColor(w) + '"><span class="fe">' + face(w)[1] + '</span><span class="fn">' + Math.round(w * 100) + '</span></td>';
+    });
+    t += '</tr>';
+  });
+  document.getElementById('aisho-matrix').innerHTML = t + '</tbody>';
+  document.getElementById('aisho-note').textContent = '半荘30局以上のメンバーで作っています。小さい数字は「行の人が列の人より上の着順だった割合（%）」。同卓' + PAIR_MIN + '局未満は「·」。全員との相性はランキングから各プレイヤーを開くと見られます。';
+
+  // --- 天敵とお得意様 ---
+  document.getElementById('aisho-pairs').innerHTML = allPairs(20).filter(x => Math.abs(x.w - 0.5) >= 0.1)
+    .sort((x, y) => Math.abs(y.w - 0.5) - Math.abs(x.w - 0.5)).slice(0, 10).map(x => {
+      const [g, l, w] = x.w >= 0.5 ? [x.a, x.b, x.w] : [x.b, x.a, 1 - x.w];
+      return '<div class="row">' + avatar(g, 30) +
+        '<div class="info"><div class="name" style="font-size:14px">' + nm(g) + ' <span style="color:var(--text3);font-weight:400">は</span> ' + nm(l) + ' <span style="color:var(--text3);font-weight:400">の天敵</span></div>' +
+        '<div class="sub">' + quip(g, l, w) + '</div><div class="sub num" style="color:var(--text3)">同卓' + x.h.n + '局 · ' + Math.round(w * x.h.n) + '回上</div></div>' +
+        '<div class="right"><div class="amount num pos">' + Math.round(w * 100) + '<small>%</small></div></div></div>';
+    }).join('');
+}
+document.getElementById('aisho-matrix').addEventListener('click', e => {
+  const td = e.target.closest('td[data-a]'); if (!td) return;
+  document.querySelectorAll('.matrix td.sel').forEach(x => x.classList.remove('sel'));
+  td.classList.add('sel');
+  const a = td.dataset.a, b = td.dataset.b, h = (H[a] || {})[b], box = document.getElementById('aisho-pick');
+  if (!h) { box.innerHTML = san(a) + 'と' + san(b) + 'はまだ同卓したことがありません。次回ぜひ！🀄'; return; }
+  const w = winRate(h), hb = H[b][a], f = face(w);
+  const line = w >= 0.5 ? quip(a, b, w) : quip(b, a, 1 - w);
+  box.innerHTML = '<b>' + san(a) + '</b>から見た<b>' + san(b) + '</b>は… <b>' + f[1] + ' ' + f[2] + '</b>' + (h.n < PAIR_MIN ? '（データ少なめ）' : '') + '<br>' +
+    line + '<br><span style="font-size:12px">同卓' + h.n + '局で' + esc(a) + 'が上 ' + Math.round(h.win) + '回（' + Math.round(w * 100) + '%） · 収支 ' + esc(a) + ' <span class="' + cls(h.pay) + '">' + yen(h.pay) + '円</span> / ' + esc(b) + ' <span class="' + cls(hb.pay) + '">' + yen(hb.pay) + '円</span></span>';
+});
 
 // ---------- 年度別 ----------
 function renderYearly() {
