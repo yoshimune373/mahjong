@@ -2,677 +2,710 @@
 # -*- coding: utf-8 -*-
 """
 麻雀スコアダッシュボード 自動生成スクリプト
+
+使い方: python generate_dashboard.py <CSVフォルダ> <出力HTML>
 """
-import csv, json, os, glob, sys
-from datetime import datetime
+import csv, json, os, glob, re, sys
+from datetime import datetime, timezone, timedelta
+
+JST = timezone(timedelta(hours=9))
+
+
+def _num(v, cast=float):
+    v = (v or '').strip()
+    if not v or v == '-':
+        return None
+    try:
+        return cast(float(v))
+    except ValueError:
+        return None
+
+
+def parse_csv_file(filepath):
+    """1ファイルを読み、日付ごとのセッションのリストを返す"""
+    with open(filepath, encoding='utf-8-sig', newline='') as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+        headers = reader.fieldnames or []
+    if not rows:
+        return []
+
+    # プレイヤー名を抽出（ヘッダー末尾の空白は無視）
+    players = [h.strip()[:-2].strip() for h in headers if h.strip().endswith('点数')]
+    cols = {p: {} for p in players}
+    for h in headers:
+        hs = h.strip()
+        for p in players:
+            for key, label in (('pt', '点数'), ('sc', 'スコア'), ('chip', 'チップ'), ('pay', '収支')):
+                if hs == p + ' ' + label:
+                    cols[p][key] = h
+
+    by_date = {}
+    for row in rows:
+        date = (row.get('日付') or '').strip()
+        if date:
+            by_date.setdefault(date, []).append(row)
+
+    sessions = []
+    for date, date_rows in by_date.items():
+        date_rows.sort(key=lambda r: _num(r.get('回戦数'), int) or 0)
+        games, chips = [], [0] * len(players)
+        for row in date_rows:
+            g = {'pt': [], 'sc': [], 'pay': []}
+            for i, p in enumerate(players):
+                c = cols[p]
+                g['pt'].append(_num(row.get(c.get('pt', '')), int) or 0)
+                g['sc'].append(_num(row.get(c.get('sc', ''))) or 0.0)
+                g['pay'].append(_num(row.get(c.get('pay', '')), int) or 0)
+                chips[i] += _num(row.get(c.get('chip', '')), int) or 0
+            games.append(g)
+        sessions.append({
+            'date': date,
+            'players': players[:],
+            'games': games,
+            'chips': chips,
+            'src': os.path.basename(filepath),
+        })
+    return sessions
+
+
+def _fix_chips(games, chips):
+    """チップ合計がゼロにならない場合、1半荘目の収支から逆算して補正する。
+    収支 = スコア×点単価 + チップ×チップ単価 の関係を使い、
+    1人分だけ入力ミスしているケースのみ補正する（それ以外はそのまま）。"""
+    if sum(chips) == 0 or not games:
+        return chips
+    # 点単価：チップの載らない2半荘目以降の 収支/スコア から求める
+    rate = None
+    for g in games[1:]:
+        for sc, pay in zip(g['sc'], g['pay']):
+            if sc:
+                rate = pay / sc
+                break
+        if rate:
+            break
+    if not rate:
+        return chips
+    g0 = games[0]
+    chip_yen = [pay - sc * rate for sc, pay in zip(g0['sc'], g0['pay'])]
+    # チップ単価：記録と収支が整合しているプレイヤーから求める
+    unit = None
+    for c, y in zip(chips, chip_yen):
+        if c and abs(y / c - round(y / c)) < 1e-6 and round(y / c) > 0:
+            cand = round(y / c)
+            if all(abs(yy - cc * cand) < 1e-6 for cc, yy in zip(chips, chip_yen) if cc and cc != c) or unit is None:
+                unit = cand
+    if not unit:
+        return chips
+    derived = [round(y / unit) for y in chip_yen]
+    if sum(derived) != 0 or sum(a != b for a, b in zip(chips, derived)) != 1:
+        return chips
+    return derived
+
+
+def _first_game_sig(sess):
+    """1半荘目の素点（プレイヤー順に依存しない）"""
+    g = sess['games'][0]
+    return tuple(sorted(zip(sess['players'], g['pt'])))
+
+
+def _export_time(sess):
+    """ファイル名末尾の出力日時（例: 2026-04-24 18_00_04.332933）"""
+    m = re.search(r'(\d{4}-\d{2}-\d{2} \d{2}[_:]\d{2}[_:]\d{2}(?:\.\d+)?)', sess['src'])
+    return m.group(1).replace(':', '_') if m else ''
+
+
+def dedupe(sessions):
+    """同じセッションが複数のCSVに入っている場合に1つにまとめる。
+    同一日・同一メンバーで1半荘目の素点が一致するものは同じセッションとみなし、
+    チップ合計がゼロ（差し引きで記録）のものを優先し、その中で出力日時が
+    最も新しいもの（同時刻なら半荘数が多いもの）を採用する。
+    途中で出力したCSVや、後から点数を修正したCSVもこれで最新版に揃う。"""
+    groups = {}
+    for s in sessions:
+        key = (s['date'], tuple(sorted(s['players'])), _first_game_sig(s))
+        groups.setdefault(key, []).append(s)
+
+    kept, removed = [], 0
+    for group in groups.values():
+        group.sort(key=lambda s: (sum(s['chips']) == 0, _export_time(s), len(s['games'])), reverse=True)
+        s = group[0]
+        fixed = _fix_chips(s['games'], s['chips'])
+        if fixed != s['chips']:
+            print(f"  チップ補正: {s['date']} {s['players']} {s['chips']} → {fixed}（収支から逆算）", file=sys.stderr)
+            s['chips'] = fixed
+        elif sum(s['chips']) != 0:
+            print(f"  注意: チップ合計が0になりません: {s['date']} {s['players']} {s['chips']}", file=sys.stderr)
+        kept.append(s)
+        removed += len(group) - 1
+    return kept, removed
 
 
 def parse_csv_files(score_dir):
     sessions = []
-    for filepath in glob.glob(os.path.join(score_dir, "*.csv")):
+    for filepath in sorted(glob.glob(os.path.join(score_dir, '*.csv'))):
         try:
-            with open(filepath, encoding='utf-8-sig', newline='') as f:
-                reader = csv.DictReader(f)
-                rows = list(reader)
-                if not rows:
-                    continue
-                headers = reader.fieldnames
-
-                # プレイヤー名を抽出（末尾スペースをstripして判定）
-                players = []
-                for h in headers:
-                    if h.strip().endswith('点数'):
-                        p = h.strip().replace('点数', '').strip()
-                        players.append(p)
-
-                # ヘッダー名を strip して逆引きマップ
-                key_map = {}
-                for p in players:
-                    key_map[p] = {}
-                    for h in headers:
-                        hs = h.strip()
-                        if hs == p + ' スコア':
-                            key_map[p]['score'] = h
-                        elif hs == p + ' 収支':
-                            key_map[p]['payout'] = h
-                        elif hs == p + ' チップ':
-                            key_map[p]['chip'] = h
-
-                # 日付でグループ化
-                date_groups = {}
-                for row in rows:
-                    date = row.get('日付', '').strip()
-                    if date:
-                        date_groups.setdefault(date, []).append(row)
-
-                for date, date_rows in date_groups.items():
-                    scores, payouts, chips_list = [], [], []
-                    # 局ごとの順位・飛び集計
-                    game_ranks = {p: {1:0,2:0,3:0,4:0} for p in players}
-                    game_tobi = {p: 0 for p in players}
-                    for row in date_rows:
-                        game_scores = {}
-                        for p in players:
-                            sk = key_map[p].get('score', '')
-                            pk2 = key_map[p].get('score', '')
-                            # 点数（スコアではなく元の点数）で飛びを判定
-                            score_key = ''
-                            for h in reader.fieldnames or []:
-                                if h.strip() == p + ' 点数':
-                                    score_key = h
-                                    break
-                            try:
-                                sv = float(row.get(sk, '') or 0)
-                                game_scores[p] = sv
-                            except:
-                                game_scores[p] = 0
-                            # 点数がマイナスなら飛び
-                            try:
-                                pts_key = ''
-                                for h in (reader.fieldnames or []):
-                                    if h.strip() == p + ' 点数':
-                                        pts_key = h
-                                        break
-                                pts = float(row.get(pts_key, '') or 0)
-                                if pts < 0:
-                                    game_tobi[p] += 1
-                            except:
-                                pass
-                        sorted_players = sorted(game_scores.keys(), key=lambda p: game_scores[p], reverse=True)
-                        for rank_i, p in enumerate(sorted_players):
-                            game_ranks[p][rank_i+1] += 1
-
-                    for p in players:
-                        s_sum = p_sum = c_sum = 0
-                        sk = key_map[p].get('score', '')
-                        pk = key_map[p].get('payout', '')
-                        ck = key_map[p].get('chip', '')
-                        for i, row in enumerate(date_rows):
-                            try: s_sum += float(row.get(sk, '') or 0)
-                            except: pass
-                            try: p_sum += int(row.get(pk, '') or 0)
-                            except: pass
-                            if i == 0:
-                                try:
-                                    cv = (row.get(ck, '') or '').strip()
-                                    if cv and cv != '-':
-                                        c_sum = int(cv)
-                                except: pass
-                        scores.append(round(s_sum))
-                        payouts.append(p_sum)
-                        chips_list.append(c_sum)
-                    sessions.append({
-                        'date': date, 'players': players[:],
-                        'scores': scores, 'payouts': payouts,
-                        'chips': chips_list, 'games': len(date_rows),
-                        'game_ranks': {p: game_ranks[p] for p in players},
-                        'game_tobi': {p: game_tobi[p] for p in players}
-                    })
+            sessions.extend(parse_csv_file(filepath))
         except Exception as e:
             print(f"警告: {filepath}: {e}", file=sys.stderr)
 
-    # === 重複セッションの除去 ===
-    # 「日付・プレイヤー（ソート済み）・スコア合計」が同じものを重複とみなす
-    seen = {}
-    deduped = []
-    removed = 0
-    for sess in sessions:
-        key = (
-            sess['date'],
-            tuple(sorted(sess['players'])),
-            tuple(sorted(sess['scores']))
-        )
-        if key not in seen:
-            seen[key] = True
-            deduped.append(sess)
-        else:
-            removed += 1
+    sessions, removed = dedupe(sessions)
     if removed:
-        print(f"  重複セッションを {removed} 件スキップしました", file=sys.stderr)
+        print(f"  重複・途中出力のセッションを {removed} 件スキップしました", file=sys.stderr)
 
-    deduped.sort(key=lambda s: s['date'])
-    return deduped
+    sessions.sort(key=lambda s: (s['date'], s['src']))
+    for s in sessions:
+        del s['src']
+        # スコアは小数第1位まで（JSONを小さくする）
+        for g in s['games']:
+            g['sc'] = [round(v, 1) for v in g['sc']]
+    return sessions
 
 
-def generate_html(sessions, output_path):
-    updated_at = datetime.now().strftime('%Y/%m/%d %H:%M')
-    session_count = len(sessions)
-    date_range = (sessions[0]['date'] + ' 〜 ' + sessions[-1]['date']) if sessions else ''
-    sessions_json = json.dumps(sessions, ensure_ascii=False)
-
-    # HTMLテンプレート（f-stringを使わずプレースホルダーで安全に組み立て）
-    html_parts = []
-    html_parts.append("""<!DOCTYPE html>
+TEMPLATE = r"""<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🀄 麻雀スコアダッシュボード</title>
+<title>麻雀スコア</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🀄</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
-  --bg:#fff;--bg2:#f5f5f3;--bg3:#eeede8;
-  --text:#1a1a18;--text2:#6b6b67;--text3:#9b9b97;
-  --border:rgba(0,0,0,0.1);--border2:rgba(0,0,0,0.2);
-  --green:#1D9E75;--red:#D85A30;
+  --bg:#ffffff;--bg2:#f5f5f2;--bg3:#ecebe6;--page:#e7e6e0;
+  --text:#1a1a18;--text2:#5f5f5b;--text3:#8e8e89;
+  --border:rgba(0,0,0,0.09);--border2:rgba(0,0,0,0.18);
+  --green:#17845F;--red:#C94F27;--gold:#B06E12;--silver:#7d7c76;--bronze:#93401f;
+  --green-bg:rgba(23,132,95,0.12);--red-bg:rgba(201,79,39,0.12);
+  --accent:#1a1a18;--on-accent:#ffffff;
 }
-@media(prefers-color-scheme:dark){
+@media (prefers-color-scheme:dark){
   :root{
-    --bg:#1c1c1a;--bg2:#252523;--bg3:#2e2e2c;
-    --text:#f0efe8;--text2:#9b9b97;--text3:#6b6b67;
-    --border:rgba(255,255,255,0.1);--border2:rgba(255,255,255,0.2);
-    --green:#5DCAA5;--red:#F0997B;
+    --bg:#1c1c1a;--bg2:#252523;--bg3:#30302d;--page:#121211;
+    --text:#f0efe8;--text2:#a8a8a2;--text3:#76766f;
+    --border:rgba(255,255,255,0.09);--border2:rgba(255,255,255,0.2);
+    --green:#5DCAA5;--red:#F0997B;--gold:#E3A64A;--silver:#b5b4ad;--bronze:#d9825e;
+    --green-bg:rgba(93,202,165,0.15);--red-bg:rgba(240,153,123,0.15);
+    --accent:#f0efe8;--on-accent:#1c1c1a;
   }
 }
-body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background:var(--bg3);color:var(--text);}
-.app{max-width:480px;margin:0 auto;background:var(--bg);min-height:100vh;}
-.header{padding:1rem 1rem 0.75rem;background:var(--bg);border-bottom:0.5px solid var(--border);position:sticky;top:0;z-index:10;}
-.header h1{font-size:20px;font-weight:600;}
-.header p{font-size:12px;color:var(--text2);margin-top:2px;}
-.updated{font-size:10px;color:var(--text3);margin-top:2px;}
-.tabs{display:flex;gap:4px;padding:0.75rem 1rem;overflow-x:auto;scrollbar-width:none;border-bottom:0.5px solid var(--border);}
+html{-webkit-text-size-adjust:100%;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic UI','Meiryo',sans-serif;background:var(--page);color:var(--text);font-feature-settings:"palt";}
+.num{font-variant-numeric:tabular-nums;}
+.app{max-width:520px;margin:0 auto;background:var(--bg);min-height:100vh;}
+.top{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:0.5px solid var(--border);}
+.header{padding:14px 16px 6px;}
+.header h1{font-size:19px;font-weight:700;letter-spacing:0.02em;}
+.header .meta{font-size:12px;color:var(--text2);margin-top:3px;}
+.tabs{display:flex;gap:6px;padding:8px 16px 10px;overflow-x:auto;scrollbar-width:none;}
 .tabs::-webkit-scrollbar{display:none;}
-.tab{flex-shrink:0;font-size:13px;padding:6px 14px;border-radius:20px;border:0.5px solid var(--border2);cursor:pointer;color:var(--text2);background:transparent;transition:all 0.15s;font-family:inherit;}
-.tab.active{background:var(--text);color:var(--bg);border-color:var(--text);}
-.content{padding-bottom:2rem;}
-.section{padding:1rem 1rem 0;}
-.section-title{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:0.75rem;}
+.tab{flex-shrink:0;font-size:13px;padding:6px 14px;border-radius:999px;border:0.5px solid var(--border2);cursor:pointer;color:var(--text2);background:transparent;font-family:inherit;transition:background .15s,color .15s;}
+.tab.active{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:600;}
+.content{padding-bottom:40px;}
+.section{padding:18px 16px 0;}
+.section-title{font-size:12px;font-weight:700;color:var(--text3);letter-spacing:0.06em;margin-bottom:10px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.section-title .hint{font-weight:400;letter-spacing:0;font-size:11px;}
 .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
-.metric{background:var(--bg2);border-radius:8px;padding:0.75rem 1rem;}
+.metric{background:var(--bg2);border-radius:10px;padding:12px 14px;}
 .metric-label{font-size:11px;color:var(--text2);margin-bottom:4px;}
-.metric-value{font-size:22px;font-weight:600;color:var(--text);}
-.metric-value.pos{color:var(--green);}.metric-value.neg{color:var(--red);}
+.metric-value{font-size:22px;font-weight:700;}
 .metric-sub{font-size:11px;color:var(--text3);margin-top:2px;}
-.ranking{display:flex;flex-direction:column;gap:8px;}
-.rank-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border:0.5px solid var(--border);border-radius:12px;cursor:pointer;}
-.rank-row:active{background:var(--bg2);}
-.rank-num{font-size:14px;font-weight:600;color:var(--text3);width:20px;flex-shrink:0;text-align:center;}
-.rank-num.gold{color:#BA7517;}.rank-num.silver{color:#888780;}.rank-num.bronze{color:#993C1D;}
-.rank-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;flex-shrink:0;}
-.rank-info{flex:1;min-width:0;}
-.rank-name{font-size:15px;font-weight:600;color:var(--text);}
-.rank-detail{font-size:11px;color:var(--text2);margin-top:1px;}
-.rank-score{text-align:right;flex-shrink:0;}
-.rank-score-val{font-size:16px;font-weight:600;}
-.rank-score-sub{font-size:11px;color:var(--text2);}
-.chart-wrap{position:relative;width:100%;height:240px;margin-top:0.5rem;}
+.pos{color:var(--green);}.neg{color:var(--red);}.zero{color:var(--text2);}
+.list{display:flex;flex-direction:column;gap:8px;}
+.row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border:0.5px solid var(--border);border-radius:12px;}
+.row.click{cursor:pointer;}
+.row.click:hover{background:var(--bg2);}
+.rank-num{font-size:14px;font-weight:700;color:var(--text3);width:22px;flex-shrink:0;text-align:center;}
+.rank-num.r1{color:var(--gold);}.rank-num.r2{color:var(--silver);}.rank-num.r3{color:var(--bronze);}
+.avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;}
+.info{flex:1;min-width:0;}
+.name{font-size:15px;font-weight:700;}
+.sub{font-size:11px;color:var(--text2);margin-top:2px;line-height:1.45;}
+.right{text-align:right;flex-shrink:0;}
+.amount{font-size:16px;font-weight:700;}
+.amount small{font-size:11px;font-weight:600;margin-left:1px;}
+.chip-pill{display:inline-block;margin-top:3px;font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--bg2);}
+.chart-wrap{position:relative;width:100%;height:260px;}
 .page{display:none;}.page.show{display:block;}
-.detail-view{display:none;}.detail-view.show{display:block;}
-.overview-view.hidden{display:none;}
-.back-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);background:none;border:none;cursor:pointer;padding:0.75rem 1rem 0.25rem;font-family:inherit;}
-.stat-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--border);font-size:13px;}
+.hidden{display:none !important;}
+.back-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);background:none;border:none;cursor:pointer;padding:14px 16px 0;font-family:inherit;}
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--border);font-size:13px;gap:8px;}
 .stat-row:last-child{border-bottom:none;}
-.stat-label{color:var(--text2);}.stat-val{font-weight:600;color:var(--text);}
-.stat-val.pos{color:var(--green);}.stat-val.neg{color:var(--red);}
-.history-list{display:flex;flex-direction:column;gap:10px;}
+.stat-label{color:var(--text2);}.stat-val{font-weight:700;}
+.stat-group{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.06em;padding:14px 0 2px;}
+.seg{display:inline-flex;background:var(--bg2);border-radius:9px;padding:3px;gap:2px;}
+.seg button{border:none;background:transparent;font-family:inherit;font-size:13px;color:var(--text2);padding:6px 12px;border-radius:7px;cursor:pointer;}
+.seg button.on{background:var(--bg);color:var(--text);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,0.12);}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.note{font-size:11px;color:var(--text3);margin-top:8px;line-height:1.6;}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.legend button{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);background:var(--bg2);border:none;border-radius:999px;padding:4px 10px;cursor:pointer;font-family:inherit;}
+.legend button.off{opacity:0.4;}
+.legend .dot{width:9px;height:9px;border-radius:50%;}
+.legend-actions{display:flex;gap:10px;margin-bottom:8px;}
+.linkbtn{background:none;border:none;color:var(--text2);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;padding:0;}
+.form{display:flex;gap:4px;flex-wrap:wrap;}
+.form span{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+.f1{background:var(--green-bg);color:var(--green);}.f2,.f3{background:var(--bg2);color:var(--text2);}.f4{background:var(--red-bg);color:var(--red);}
 .history-card{border:0.5px solid var(--border);border-radius:12px;overflow:hidden;}
-.history-header{padding:8px 12px;background:var(--bg2);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;}
-.history-date{font-size:12px;color:var(--text2);}.history-games{font-size:11px;color:var(--text3);}
-.history-body{padding:8px 12px;}
-.history-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;border-bottom:0.5px solid var(--border);}
+.history-header{padding:8px 12px;background:var(--bg2);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;font-size:12px;}
+.history-header .d{font-weight:700;}.history-header .g{color:var(--text3);}
+.history-body{padding:4px 12px;}
+.history-row{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;font-size:13px;padding:6px 0;border-bottom:0.5px solid var(--border);}
 .history-row:last-child{border-bottom:none;}
-.badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:600;}
-.badge-top{background:rgba(29,158,117,0.15);color:var(--green);}
-.badge-bot{background:rgba(216,90,48,0.15);color:var(--red);}
-.legend-wrap{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:0.75rem;}
-.legend-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);}
-.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.history-row .s{color:var(--text3);font-size:12px;}
+.badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:700;vertical-align:1px;}
+.badge-top{background:var(--green-bg);color:var(--green);}
+.badge-bot{background:var(--red-bg);color:var(--red);}
+.bar{height:8px;border-radius:4px;background:var(--bg3);overflow:hidden;}
+.bar div{height:100%;border-radius:4px;}
+.bar-row{margin-bottom:10px;}
+.bar-row .top-line{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;font-weight:700;}
+.year-block{margin-bottom:20px;}
+.year-title{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:6px;}
 </style>
 </head>
 <body>
 <div class="app">
-  <div class="header">
-    <h1>🀄 麻雀スコア</h1>
-    <p>全""")
-    html_parts.append(str(session_count))
-    html_parts.append("セッション · ")
-    html_parts.append(date_range)
-    html_parts.append("""</p>
-    <p class="updated">更新: """)
-    html_parts.append(updated_at)
-    html_parts.append("""</p>
-  </div>
-  <div class="tabs">
-    <button class="tab active" onclick="showPage('ranking',this)">ランキング</button>
-    <button class="tab" onclick="showPage('trend',this)">推移</button>
-    <button class="tab" onclick="showPage('stats',this)">統計</button>
-    <button class="tab" onclick="showPage('yearly',this)">年度別</button>
-    <button class="tab" onclick="showPage('history',this)">履歴</button>
+  <div class="top">
+    <div class="header">
+      <h1>🀄 麻雀スコア</h1>
+      <div class="meta num">全__SESSION_COUNT__セッション · __DATE_RANGE__</div>
+      <div class="meta num" style="color:var(--text3);font-size:11px">更新 __UPDATED_AT__</div>
+    </div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-page="ranking">ランキング</button>
+      <button class="tab" data-page="recent">直近成績</button>
+      <button class="tab" data-page="trend">推移</button>
+      <button class="tab" data-page="stats">統計</button>
+      <button class="tab" data-page="yearly">年度別</button>
+      <button class="tab" data-page="history">履歴</button>
+    </div>
   </div>
   <div class="content">
     <div id="page-ranking" class="page show">
-      <div id="overview-view" class="overview-view">
-        <div class="section"><div class="section-title">総合収支ランキング</div><div class="ranking" id="ranking-list"></div></div>
-        <div class="section"><div class="section-title">累計収支の推移（円）</div><div id="rank-legend" class="legend-wrap"></div><div class="chart-wrap"><canvas id="rankChart"></canvas></div></div>
+      <div id="overview-view">
+        <div class="section"><div class="section-title"><span>総合収支ランキング</span><span class="hint">タップで個人成績</span></div><div class="list" id="ranking-list"></div></div>
       </div>
-      <div id="detail-view" class="detail-view">
-        <button class="back-btn" onclick="showOverview()">← 一覧へ戻る</button>
+      <div id="detail-view" class="hidden">
+        <button class="back-btn" id="back-btn">← 一覧へ戻る</button>
         <div class="section"><div class="grid2" id="detail-metrics"></div></div>
+        <div class="section"><div class="section-title">直近10半荘の着順（右が最新）</div><div class="form" id="detail-form"></div></div>
         <div class="section"><div class="section-title">対戦成績詳細</div><div id="detail-stats"></div></div>
         <div class="section"><div class="section-title">収支の累計推移</div><div class="chart-wrap"><canvas id="detailChart"></canvas></div></div>
         <div class="section"><div class="section-title">年度別収支</div><div id="detail-yearly"></div></div>
       </div>
     </div>
+
+    <div id="page-recent" class="page">
+      <div class="section">
+        <div class="controls">
+          <div class="seg" id="recent-n"><button data-v="10" class="on">直近10</button><button data-v="30">30</button><button data-v="50">50</button><button data-v="0">全部</button></div>
+          <div class="seg" id="recent-unit"><button data-v="game" class="on">半荘</button><button data-v="session">セッション</button></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-title"><span id="recent-title"></span>
+          <span class="seg" id="recent-sort" style="font-size:12px"><button data-v="pay" class="on">収支</button><button data-v="avg">着順</button><button data-v="chip">チップ</button></span>
+        </div>
+        <div class="list" id="recent-list"></div>
+        <p class="note" id="recent-note"></p>
+      </div>
+    </div>
+
     <div id="page-trend" class="page">
-      <div class="section"><div class="section-title">累計収支の推移</div><div id="trend-legend" class="legend-wrap"></div><div class="chart-wrap" style="height:280px"><canvas id="trendChart"></canvas></div></div>
-      <div class="section"><div class="section-title">セッション別 最高/最低収支</div><div class="chart-wrap" style="height:280px"><canvas id="sessionChart"></canvas></div></div>
+      <div class="section">
+        <div class="section-title"><span>累計収支の推移（円）</span></div>
+        <div class="legend-actions"><button class="linkbtn" data-legend-all="trend">全員表示</button><button class="linkbtn" data-legend-top="trend">参加の多い6人</button></div>
+        <div class="legend" id="trend-legend"></div>
+        <div class="chart-wrap" style="height:300px"><canvas id="trendChart"></canvas></div>
+      </div>
+      <div class="section"><div class="section-title">セッション別 最高 / 最低収支</div><div class="chart-wrap" style="height:240px"><canvas id="sessionChart"></canvas></div></div>
     </div>
+
     <div id="page-stats" class="page">
-      <div class="section"><div class="section-title">プレイヤー別成績</div><div class="ranking" id="stats-list"></div></div>
-      <div class="section" style="margin-top:0.5rem"><div class="section-title">累計チップ</div><div id="chip-stats"></div></div>
-      <div class="section"><div class="section-title">順位獲得率（積み上げ）</div><div class="chart-wrap" style="height:220px"><canvas id="winChart"></canvas></div></div>
-      <div class="section"><div class="section-title">平均順位（低いほど良い）</div><div class="chart-wrap" style="height:220px"><canvas id="avgRankChart"></canvas></div></div>
+      <div class="section"><div class="section-title"><span>プレイヤー別成績</span><span class="hint">着順率は半荘単位</span></div><div class="list" id="stats-list"></div></div>
+      <div class="section"><div class="section-title">累計チップ</div><div id="chip-stats"></div></div>
+      <div class="section"><div class="section-title">着順率（半荘単位）</div><div class="chart-wrap" id="winChartWrap"><canvas id="winChart"></canvas></div></div>
+      <div class="section"><div class="section-title">平均着順（低いほど良い）</div><div class="chart-wrap" id="avgChartWrap"><canvas id="avgRankChart"></canvas></div></div>
     </div>
+
     <div id="page-yearly" class="page">
       <div class="section"><div class="section-title">年度別収支</div><div id="yearly-content"></div></div>
-      <div class="section"><div class="section-title">年度別収支グラフ</div><div class="chart-wrap" style="height:280px"><canvas id="yearlyChart"></canvas></div></div>
     </div>
+
     <div id="page-history" class="page">
-      <div class="section"><div class="section-title">対戦履歴（新しい順）</div><div class="history-list" id="history-list"></div></div>
+      <div class="section"><div class="section-title">対戦履歴（新しい順）</div><div class="list" id="history-list"></div></div>
     </div>
   </div>
 </div>
 <script>
-const COLORS={'南':'#378ADD','林':'#1D9E75','関河':'#D85A30','古川':'#D4537E','熊坂':'#7F77DD','矢田':'#BA7517','西村':'#888780','鎌田':'#639922','藤田':'#993C1D'};
-const allData=""")
-    html_parts.append(sessions_json)
-    html_parts.append(""";
+const DATA = __DATA__;
 
-const playerTotals={},playerGames={},playerSessions={},playerRanks={},playerRankSum={},playerSessionCount={},playerChips={},playerGameRanks={},playerTobi={};
-allData.forEach(function(sess){
-  var sorted=sess.scores.slice().sort(function(a,b){return b-a;});
-  sess.players.forEach(function(p,i){
-    if(!playerTotals[p]){
-      playerTotals[p]=0;playerGames[p]=0;playerSessions[p]=[];
-      playerRanks[p]={1:0,2:0,3:0,4:0};playerRankSum[p]=0;playerSessionCount[p]=0;
-      playerChips[p]=0;playerGameRanks[p]={1:0,2:0,3:0,4:0};playerTobi[p]=0;
-    }
-    playerTotals[p]+=sess.payouts[i];
-    playerGames[p]+=sess.games;
-    var chip=sess.chips&&sess.chips[i]?sess.chips[i]:0;
-    playerChips[p]+=chip;
-    playerSessions[p].push({date:sess.date,score:sess.scores[i],payout:sess.payouts[i],chip:chip});
-    playerSessionCount[p]++;
-    var rank=sorted.indexOf(sess.scores[i])+1;
-    if(playerRanks[p][rank]!==undefined) playerRanks[p][rank]++;
-    playerRankSum[p]+=rank;
-    // 局ごとの順位を集計
-    if(sess.game_ranks&&sess.game_ranks[p]){
-      var gr=sess.game_ranks[p];
-      for(var r=1;r<=4;r++){
-        playerGameRanks[p][r]+=(gr[r]||0);
-      }
-    }
-    // 飛び回数を集計
-    if(sess.game_tobi&&sess.game_tobi[p]){
-      playerTobi[p]+=(sess.game_tobi[p]||0);
-    }
+// ---------- 共通 ----------
+const BASE_COLORS = {'南':'#378ADD','林':'#1D9E75','関河':'#D85A30','古川':'#D4537E','熊坂':'#7F77DD','矢田':'#BA7517','西村':'#8A8A82','鎌田':'#639922','藤田':'#B0472A'};
+const EXTRA_COLORS = ['#0F9DAA','#C23B8E','#5B6CD6','#A0861A','#2F8F4E','#E0703A','#7A5BC4','#3A86A8','#B5566E','#4E9A2A','#C77D16','#6B6BB5'];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const yen = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n).toLocaleString();
+const sgn = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(Math.round(n * 10) / 10);
+const cls = n => n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero';
+const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// ---------- 集計 ----------
+// プレイヤーごとの半荘・セッション明細（古い順）
+const P = {};
+function ensure(p) {
+  return P[p] || (P[p] = {name: p, games: [], sessions: []});
+}
+function ranksOf(arr) { // 大きい順の順位（同点は同順位）
+  return arr.map(v => 1 + arr.filter(x => x > v).length);
+}
+DATA.forEach((s, si) => {
+  const n = s.players.length;
+  const pay = Array(n).fill(0), sc = Array(n).fill(0);
+  s.games.forEach((g, gi) => {
+    const rk = ranksOf(g.sc);
+    s.players.forEach((p, i) => {
+      pay[i] += g.pay[i]; sc[i] += g.sc[i];
+      ensure(p).games.push({si, date: s.date, rank: rk[i], sc: g.sc[i], pay: g.pay[i],
+        chip: gi === 0 ? s.chips[i] : 0, tobi: g.pt[i] < 0 ? 1 : 0});
+    });
+  });
+  s.pay = pay; s.sc = sc.map(v => Math.round(v * 10) / 10);
+  const srk = ranksOf(s.sc);
+  s.players.forEach((p, i) => {
+    ensure(p).sessions.push({si, date: s.date, rank: srk[i], sc: s.sc[i], pay: pay[i], chip: s.chips[i], games: s.games.length});
   });
 });
 
-var players=Object.keys(playerTotals).sort(function(a,b){return playerTotals[b]-playerTotals[a];});
-
-// 年度別収支集計
-var yearlyData={};
-allData.forEach(function(sess){
-  var year=sess.date.slice(0,4);
-  if(!yearlyData[year]) yearlyData[year]={};
-  sess.players.forEach(function(p,i){
-    if(!yearlyData[year][p]) yearlyData[year][p]=0;
-    yearlyData[year][p]+=sess.payouts[i];
+// 半荘明細から成績をまとめる
+function summarize(games) {
+  const r = {n: games.length, pay: 0, chip: 0, sc: 0, tobi: 0, rk: {1:0,2:0,3:0,4:0}, rsum: 0};
+  games.forEach(g => {
+    r.pay += g.pay; r.chip += g.chip; r.sc += g.sc; r.tobi += g.tobi;
+    r.rk[g.rank] = (r.rk[g.rank] || 0) + 1; r.rsum += g.rank;
   });
-});
-var years=Object.keys(yearlyData).sort();
-
-function fmt(n){ return (n>=0?'+':'')+n.toLocaleString(); }
-function fmtS(n){ return (n>=0?'+':'')+n; }
-function avgRank(p){ return (playerRankSum[p]/playerSessionCount[p]).toFixed(2); }
-function rankRate(p,r){ return Math.round((playerRanks[p][r]||0)/playerSessionCount[p]*100); }
-function gameRankRate(p,r){ return playerGames[p]>0?Math.round((playerGameRanks[p][r]||0)/playerGames[p]*100):0; }
-function tobiRate(p){ return playerGames[p]>0?Math.round((playerTobi[p]||0)/playerGames[p]*100):0; }
-function col(p){ return COLORS[p]||'#888888'; }
-
-function showPage(name,btn){
-  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('show');});
-  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
-  document.getElementById('page-'+name).classList.add('show');
-  btn.classList.add('active');
-  if(name==='trend') renderTrend();
-  if(name==='stats') renderStats();
-  if(name==='yearly') renderYearly();
-  if(name==='history') renderHistory();
+  r.avg = r.n ? r.rsum / r.n : 0;
+  return r;
 }
 
-function showOverview(){
-  document.getElementById('detail-view').classList.remove('show');
+const ALL = {};
+Object.values(P).forEach(p => { ALL[p.name] = summarize(p.games); ALL[p.name].sessions = p.sessions.length; });
+const players = Object.keys(P).sort((a, b) => ALL[b].pay - ALL[a].pay);
+
+// 色：既定色＋参加数の多い順に追加色
+const COLORS = Object.assign({}, BASE_COLORS);
+let ci = 0;
+Object.keys(P).sort((a, b) => P[b].games.length - P[a].games.length).forEach(p => {
+  if (!COLORS[p]) COLORS[p] = EXTRA_COLORS[ci++ % EXTRA_COLORS.length];
+});
+const col = p => COLORS[p] || '#888888';
+
+function avatar(p, size) {
+  const st = size ? 'width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.4) + 'px;' : '';
+  return '<div class="avatar" style="' + st + 'background:' + col(p) + '22;color:' + col(p) + '">' + esc(p[0]) + '</div>';
+}
+function chipPill(c) {
+  return '<span class="chip-pill num ' + cls(c) + '">チップ ' + sgn(c) + '枚</span>';
+}
+function rankNum(i) {
+  return '<div class="rank-num num ' + (i < 3 ? 'r' + (i + 1) : '') + '">' + (i + 1) + '</div>';
+}
+
+// ---------- Chart.js 共通設定 ----------
+const charts = {};
+function chartBase() {
+  Chart.defaults.color = css('--text2');
+  Chart.defaults.borderColor = css('--border');
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+}
+function makeChart(id, cfg) {
+  if (charts[id]) charts[id].destroy();
+  chartBase();
+  charts[id] = new Chart(document.getElementById(id), cfg);
+  return charts[id];
+}
+const yenAxis = {ticks: {callback: v => v.toLocaleString()}};
+const dateTicks = {maxRotation: 0, autoSkip: true, autoSkipPadding: 16, maxTicksLimit: 5};
+
+// ---------- タブ ----------
+const rendered = {};
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(el => el.classList.toggle('show', el.id === 'page-' + name));
+  document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.page === name));
+  if (name === 'ranking') showOverview();
+  const fn = {recent: renderRecent, trend: renderTrend, stats: renderStats, yearly: renderYearly, history: renderHistory}[name];
+  if (fn && !rendered[name]) { fn(); rendered[name] = true; }
+  window.scrollTo(0, 0);
+}
+document.getElementById('tabs').addEventListener('click', e => {
+  const b = e.target.closest('.tab'); if (b) showPage(b.dataset.page);
+});
+
+// ---------- ランキング ----------
+function renderRanking() {
+  document.getElementById('ranking-list').innerHTML = players.map((p, i) => {
+    const a = ALL[p];
+    return '<div class="row click" data-player="' + esc(p) + '">' + rankNum(i) + avatar(p) +
+      '<div class="info"><div class="name">' + esc(p) + '</div><div class="sub num">' + a.sessions + '回 · ' + a.n + '半荘 · 平均' + a.avg.toFixed(2) + '着</div></div>' +
+      '<div class="right"><div class="amount num ' + cls(a.pay) + '">' + yen(a.pay) + '<small>円</small></div>' + chipPill(a.chip) + '</div></div>';
+  }).join('');
+}
+document.getElementById('ranking-list').addEventListener('click', e => {
+  const r = e.target.closest('[data-player]'); if (r) showDetail(r.dataset.player);
+});
+document.getElementById('back-btn').addEventListener('click', showOverview);
+
+function showOverview() {
+  document.getElementById('detail-view').classList.add('hidden');
   document.getElementById('overview-view').classList.remove('hidden');
 }
 
-function showDetail(player){
+function byYear(list) {
+  const y = {};
+  list.forEach(s => { const k = s.date.slice(0, 4); y[k] = (y[k] || 0) + s.pay; });
+  return y;
+}
+function barRows(entries, colorFn) {
+  const max = Math.max(1, ...entries.map(e => Math.abs(e.v)));
+  return entries.map(e =>
+    '<div class="bar-row"><div class="top-line"><span style="color:' + (colorFn ? colorFn(e) : 'var(--text2)') + '">' + esc(e.label) + '</span><span class="num ' + cls(e.v) + '">' + e.text + '</span></div>' +
+    '<div class="bar"><div style="width:' + (Math.abs(e.v) / max * 100) + '%;background:var(--' + (e.v >= 0 ? 'green' : 'red') + ')"></div></div></div>'
+  ).join('');
+}
+
+function showDetail(p) {
   document.getElementById('overview-view').classList.add('hidden');
-  document.getElementById('detail-view').classList.add('show');
-  var sessions=playerSessions[player];
-  var total=playerTotals[player];
-  var sc=playerSessionCount[player];
-  var posNeg=total>=0?'pos':'neg';
-  document.getElementById('detail-metrics').innerHTML=
-    '<div class="metric"><div class="metric-label">'+player+'の総収支</div><div class="metric-value '+posNeg+'">'+fmt(total)+'</div><div class="metric-sub">円</div></div>'+
-    '<div class="metric"><div class="metric-label">累計チップ</div><div class="metric-value '+(playerChips[player]>=0?'pos':'neg')+'">'+playerChips[player]+'</div><div class="metric-sub">枚</div></div>'+
-    '<div class="metric"><div class="metric-label">参加セッション</div><div class="metric-value">'+sc+'</div><div class="metric-sub">回</div></div>'+
-    '<div class="metric"><div class="metric-label">平均順位</div><div class="metric-value">'+avgRank(player)+'</div><div class="metric-sub">位</div></div>';
-  var payouts=sessions.map(function(s){return s.payout;});
-  var best=Math.max.apply(null,payouts);
-  var worst=Math.min.apply(null,payouts);
-  var scoreSum=sessions.reduce(function(a,s){return a+s.score;},0);
-  var r=playerRanks[player];
-  var gr=playerGameRanks[player];
-  document.getElementById('detail-stats').innerHTML=
-    '<div class="stat-row"><span class="stat-label">総プレイ対局数</span><span class="stat-val">'+playerGames[player]+'局</span></div>'+
-    '<div class="stat-row"><span class="stat-label">累計スコア合計</span><span class="stat-val">'+fmtS(scoreSum)+'</span></div>'+
-    '<div class="stat-row"><span class="stat-label">最高収支セッション</span><span class="stat-val pos">'+fmt(best)+'円</span></div>'+
-    '<div class="stat-row"><span class="stat-label">最低収支セッション</span><span class="stat-val neg">'+fmt(worst)+'円</span></div>'+
-    '<div class="stat-row" style="margin-top:6px;font-weight:600;color:var(--text3);font-size:11px;letter-spacing:0.06em">SESSION RANK</div>'+
-    '<div class="stat-row"><span class="stat-label">🥇 1位獲得率</span><span class="stat-val">'+rankRate(player,1)+'%（'+r[1]+'回）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">🥈 2位獲得率</span><span class="stat-val">'+rankRate(player,2)+'%（'+r[2]+'回）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">🥉 3位獲得率</span><span class="stat-val">'+rankRate(player,3)+'%（'+r[3]+'回）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">💀 4位獲得率</span><span class="stat-val">'+rankRate(player,4)+'%（'+r[4]+'回）</span></div>'+
-    '<div class="stat-row" style="margin-top:6px;font-weight:600;color:var(--text3);font-size:11px;letter-spacing:0.06em">GAME RANK（対局単位）</div>'+
-    '<div class="stat-row"><span class="stat-label">🥇 1位獲得率</span><span class="stat-val">'+gameRankRate(player,1)+'%（'+gr[1]+'局）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">🥈 2位獲得率</span><span class="stat-val">'+gameRankRate(player,2)+'%（'+gr[2]+'局）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">🥉 3位獲得率</span><span class="stat-val">'+gameRankRate(player,3)+'%（'+gr[3]+'局）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">💀 4位獲得率</span><span class="stat-val">'+gameRankRate(player,4)+'%（'+gr[4]+'局）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">累計チップ</span><span class="stat-val '+(playerChips[player]>=0?'pos':'neg')+'">'+playerChips[player]+'枚</span></div>'+
-    '<div class="stat-row" style="margin-top:6px;font-weight:600;color:var(--text3);font-size:11px;letter-spacing:0.06em">TOBI</div>'+
-    '<div class="stat-row"><span class="stat-label">💀 飛び率</span><span class="stat-val neg">'+tobiRate(player)+'%（'+playerTobi[player]+'回 / '+playerGames[player]+'局）</span></div>';
-  var ctx=document.getElementById('detailChart').getContext('2d');
-  if(window._dc) window._dc.destroy();
-  var acc=0;
-  var cumData=sessions.map(function(s){acc+=s.payout;return acc;});
-  window._dc=new Chart(ctx,{
-    type:'line',
-    data:{
-      labels:sessions.map(function(s){return s.date.slice(5);}),
-      datasets:[{label:player,data:cumData,borderColor:col(player),backgroundColor:'transparent',tension:0.3,pointRadius:4,borderWidth:2}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return v.toLocaleString();}}}}}
+  document.getElementById('detail-view').classList.remove('hidden');
+  window.scrollTo(0, 0);
+  const a = ALL[p], ss = P[p].sessions, gs = P[p].games;
+  const metric = (label, val, sub, c) => '<div class="metric"><div class="metric-label">' + label + '</div><div class="metric-value num ' + (c || '') + '">' + val + '</div><div class="metric-sub">' + sub + '</div></div>';
+  document.getElementById('detail-metrics').innerHTML =
+    metric(esc(p) + 'の総収支', yen(a.pay), '円', cls(a.pay)) +
+    metric('累計チップ', sgn(a.chip), '枚', cls(a.chip)) +
+    metric('参加', a.sessions, 'セッション / ' + a.n + '半荘') +
+    metric('平均着順', a.avg.toFixed(2), '位（半荘単位）');
+
+  document.getElementById('detail-form').innerHTML = gs.slice(-10).map(g => '<span class="num f' + g.rank + '" title="' + g.date + '">' + g.rank + '</span>').join('');
+
+  const pays = ss.map(s => s.pay);
+  const sr = {1:0,2:0,3:0,4:0}; ss.forEach(s => sr[s.rank]++);
+  const row = (l, v, c) => '<div class="stat-row"><span class="stat-label">' + l + '</span><span class="stat-val num ' + (c || '') + '">' + v + '</span></div>';
+  const medal = ['', '🥇', '🥈', '🥉', '💀'];
+  let h = '<div class="stat-group">半荘単位</div>';
+  for (let r = 1; r <= 4; r++) h += row(medal[r] + ' ' + r + '着率', pct(a.rk[r], a.n) + '%（' + a.rk[r] + '回）');
+  h += row('飛び率', pct(a.tobi, a.n) + '%（' + a.tobi + '回）', a.tobi ? 'neg' : '');
+  h += row('累計スコア', sgn(a.sc));
+  h += '<div class="stat-group">セッション単位</div>';
+  for (let r = 1; r <= 4; r++) h += row(medal[r] + ' ' + r + '位率', pct(sr[r], ss.length) + '%（' + sr[r] + '回）');
+  h += row('最高収支', yen(Math.max(...pays)) + '円', 'pos');
+  h += row('最低収支', yen(Math.min(...pays)) + '円', 'neg');
+  document.getElementById('detail-stats').innerHTML = h;
+
+  let acc = 0;
+  makeChart('detailChart', {
+    type: 'line',
+    data: {labels: ss.map(s => s.date.slice(2)), datasets: [{data: ss.map(s => acc += s.pay), borderColor: col(p), backgroundColor: col(p) + '22', fill: true, tension: 0.25, pointRadius: 3, borderWidth: 2}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: yenAxis, x: {ticks: dateTicks}}}
   });
 
-  // 年度別収支
-  var yearlyHtml='';
-  var totalCheck=0;
-  for(var yi=0;yi<years.length;yi++){
-    var year=years[yi];
-    if(!yearlyData[year]||yearlyData[year][player]===undefined) continue;
-    var val=yearlyData[year][player];
-    totalCheck+=val;
-    var tc=val>=0?'var(--green)':'var(--red)';
-    var barW=Math.min(100,Math.abs(val)/Math.max.apply(null,years.map(function(y){return Math.abs(yearlyData[y]&&yearlyData[y][player]?yearlyData[y][player]:0)||1;}))*100);
-    yearlyHtml+='<div style="margin-bottom:10px;">';
-    yearlyHtml+='<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">';
-    yearlyHtml+='<span style="font-weight:600;color:var(--text2)">'+year+'年</span>';
-    yearlyHtml+='<span style="font-weight:600;color:'+tc+'">'+fmt(val)+'円</span>';
-    yearlyHtml+='</div>';
-    yearlyHtml+='<div style="height:8px;border-radius:4px;background:var(--bg3);overflow:hidden;">';
-    yearlyHtml+='<div style="height:100%;width:'+barW+'%;border-radius:4px;background:'+tc+';"></div>';
-    yearlyHtml+='</div></div>';
-  }
-  document.getElementById('detail-yearly').innerHTML=yearlyHtml;
+  const y = byYear(ss);
+  document.getElementById('detail-yearly').innerHTML = barRows(Object.keys(y).sort().map(k => ({label: k + '年', v: y[k], text: yen(y[k]) + '円'})));
 }
 
-function renderRanking(){
-  var rankClass=['gold','silver','bronze'];
-  var html='';
-  for(var i=0;i<players.length;i++){
-    var p=players[i];
-    var rc=rankClass[i]||'';
-    var tc=playerTotals[p]>=0?'#1D9E75':'#D85A30';
-    html+='<div class="rank-row" data-player="'+p+'" onclick="showDetail(this.dataset.player)">';
-    html+='<div class="rank-num '+rc+'">'+(i+1)+'</div>';
-    html+='<div class="rank-avatar" style="background:'+col(p)+'22;color:'+col(p)+'">'+p[0]+'</div>';
-    html+='<div class="rank-info"><div class="rank-name">'+p+'</div><div class="rank-detail">'+playerSessionCount[p]+'セッション · 平均'+avgRank(p)+'位</div></div>';
-    html+='<div class="rank-score"><div class="rank-score-val" style="color:'+tc+'">'+fmt(playerTotals[p])+'</div><div class="rank-score-sub">円</div></div>';
-    html+='</div>';
-  }
-  document.getElementById('ranking-list').innerHTML=html;
+// ---------- 直近成績 ----------
+const recentState = {n: 10, unit: 'game', sort: 'pay'};
+function bindSeg(id, key, cast) {
+  document.getElementById(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    e.currentTarget.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    recentState[key] = cast ? cast(b.dataset.v) : b.dataset.v;
+    renderRecent();
+  });
+}
+bindSeg('recent-n', 'n', Number); bindSeg('recent-unit', 'unit'); bindSeg('recent-sort', 'sort');
 
-  var dateLabels=[...new Set(allData.map(function(d){return d.date;}))].sort();
-  var legendHtml='';
-  for(var i=0;i<players.length;i++){
-    legendHtml+='<span class="legend-item"><span class="legend-dot" style="background:'+col(players[i])+'"></span>'+players[i]+'</span>';
-  }
-  document.getElementById('rank-legend').innerHTML=legendHtml;
+function renderRecent() {
+  const {n, unit, sort} = recentState;
+  const unitLabel = unit === 'game' ? '半荘' : 'セッション';
+  const rows = Object.keys(P).map(p => {
+    let r;
+    if (unit === 'game') {
+      const g = n ? P[p].games.slice(-n) : P[p].games;
+      r = summarize(g); r.count = g.length; r.from = g.length ? g[0].date : '';
+    } else {
+      const s = n ? P[p].sessions.slice(-n) : P[p].sessions;
+      r = {pay: 0, chip: 0, rk: {1:0,2:0,3:0,4:0}, rsum: 0, count: s.length, from: s.length ? s[0].date : ''};
+      s.forEach(x => { r.pay += x.pay; r.chip += x.chip; r.rk[x.rank]++; r.rsum += x.rank; });
+      r.avg = r.count ? r.rsum / r.count : 0;
+    }
+    r.name = p; r.full = !n || r.count >= n;
+    return r;
+  });
+  const key = {pay: (a, b) => b.pay - a.pay, avg: (a, b) => a.avg - b.avg, chip: (a, b) => b.chip - a.chip}[sort];
+  rows.sort((a, b) => (b.full - a.full) || key(a, b));
 
-  var datasets=players.map(function(p){
-    var acc=0;
-    var data=dateLabels.map(function(date){
-      var s=null;
-      for(var j=0;j<allData.length;j++){
-        if(allData[j].date===date && allData[j].players.indexOf(p)>=0){s=allData[j];break;}
-      }
-      if(s) acc+=s.payouts[s.players.indexOf(p)];
-      return acc;
+  document.getElementById('recent-title').textContent = (n ? '直近' + n + unitLabel : '全期間') + 'の成績';
+  document.getElementById('recent-list').innerHTML = rows.map((r, i) => {
+    const short = !r.full;
+    return '<div class="row" style="' + (short ? 'opacity:0.55' : '') + '">' + rankNum(i) + avatar(r.name) +
+      '<div class="info"><div class="name">' + esc(r.name) + '</div>' +
+      '<div class="sub num">' + r.count + unitLabel + (short ? '（不足）' : '') + ' · 平均' + r.avg.toFixed(2) + ' · トップ' + pct(r.rk[1], r.count) + '% · ラス' + pct(r.rk[4], r.count) + '%</div></div>' +
+      '<div class="right"><div class="amount num ' + cls(r.pay) + '">' + yen(r.pay) + '<small>円</small></div>' + chipPill(r.chip) + '</div></div>';
+  }).join('');
+  document.getElementById('recent-note').textContent = n
+    ? '各プレイヤー本人の直近' + n + unitLabel + 'で集計しています。' + n + unitLabel + 'に満たないプレイヤーは薄く表示し、下にまとめています。'
+      + (unit === 'game' ? 'チップはセッション単位の記録のため、そのセッションの1半荘目が範囲に入っている場合に加算しています。' : '')
+    : '全期間の成績です。';
+}
+
+// ---------- 推移 ----------
+const legendState = {};
+function topPlayers(k) {
+  return Object.keys(P).sort((a, b) => P[b].sessions.length - P[a].sessions.length).slice(0, k);
+}
+function renderLegend(id, chartId) {
+  const vis = legendState[chartId];
+  document.getElementById(id).innerHTML = players.map(p =>
+    '<button data-p="' + esc(p) + '" class="' + (vis.has(p) ? '' : 'off') + '"><span class="dot" style="background:' + col(p) + '"></span>' + esc(p) + '</button>').join('');
+}
+function applyLegend(chartId) {
+  const c = charts[chartId], vis = legendState[chartId];
+  c.data.datasets.forEach(d => d.hidden = !vis.has(d.label));
+  c.update();
+  renderLegend('trend-legend', chartId);
+}
+document.getElementById('trend-legend').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const vis = legendState.trendChart;
+  vis.has(b.dataset.p) ? vis.delete(b.dataset.p) : vis.add(b.dataset.p);
+  applyLegend('trendChart');
+});
+document.querySelector('[data-legend-all]').addEventListener('click', () => { legendState.trendChart = new Set(players); applyLegend('trendChart'); });
+document.querySelector('[data-legend-top]').addEventListener('click', () => { legendState.trendChart = new Set(topPlayers(6)); applyLegend('trendChart'); });
+
+function renderTrend() {
+  legendState.trendChart = legendState.trendChart || new Set(topPlayers(6));
+  const labels = DATA.map(s => s.date.slice(2));
+  const datasets = players.map(p => {
+    let acc = 0;
+    const data = DATA.map(s => {
+      const i = s.players.indexOf(p);
+      if (i < 0) return null;
+      return acc += s.pay[i];
     });
-    return {label:p,data:data,borderColor:col(p),backgroundColor:'transparent',tension:0.3,pointRadius:3,borderWidth:2};
+    return {label: p, data, borderColor: col(p), backgroundColor: col(p), tension: 0.25, pointRadius: 2, borderWidth: 2, spanGaps: true, hidden: !legendState.trendChart.has(p)};
   });
-
-  var ctx=document.getElementById('rankChart').getContext('2d');
-  if(window._rc) window._rc.destroy();
-  window._rc=new Chart(ctx,{
-    type:'line',
-    data:{labels:dateLabels.map(function(d){return d.slice(5);}),datasets:datasets},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return v.toLocaleString();}}}}}
+  makeChart('trendChart', {
+    type: 'line', data: {labels, datasets},
+    options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'nearest', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {callbacks: {label: c => c.dataset.label + ' ' + yen(c.parsed.y) + '円'}}},
+      scales: {y: yenAxis, x: {ticks: dateTicks}}}
   });
-}
+  renderLegend('trend-legend', 'trendChart');
 
-function renderTrend(){
-  var dateLabels=[...new Set(allData.map(function(d){return d.date;}))].sort();
-  var legendHtml='';
-  for(var i=0;i<players.length;i++){
-    legendHtml+='<span class="legend-item"><span class="legend-dot" style="background:'+col(players[i])+'"></span>'+players[i]+'</span>';
-  }
-  document.getElementById('trend-legend').innerHTML=legendHtml;
-
-  var datasets=players.map(function(p){
-    var acc=0;
-    var data=dateLabels.map(function(date){
-      var s=null;
-      for(var j=0;j<allData.length;j++){
-        if(allData[j].date===date && allData[j].players.indexOf(p)>=0){s=allData[j];break;}
-      }
-      if(s){acc+=s.payouts[s.players.indexOf(p)];return acc;}
-      return null;
-    });
-    return {label:p,data:data,borderColor:col(p),backgroundColor:'transparent',tension:0.3,pointRadius:3,borderWidth:2,spanGaps:true};
-  });
-
-  var ctx1=document.getElementById('trendChart').getContext('2d');
-  if(window._tc) window._tc.destroy();
-  window._tc=new Chart(ctx1,{
-    type:'line',
-    data:{labels:dateLabels.map(function(d){return d.slice(5);}),datasets:datasets},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return v.toLocaleString();}}}}}
-  });
-
-  var ctx2=document.getElementById('sessionChart').getContext('2d');
-  if(window._sc) window._sc.destroy();
-  window._sc=new Chart(ctx2,{
-    type:'bar',
-    data:{
-      labels:allData.map(function(d){return d.date.slice(5);}),
-      datasets:[
-        {label:'最高収支',data:allData.map(function(d){return Math.max.apply(null,d.payouts);}),backgroundColor:'rgba(29,158,117,0.5)'},
-        {label:'最低収支',data:allData.map(function(d){return Math.min.apply(null,d.payouts);}),backgroundColor:'rgba(216,90,48,0.5)'}
-      ]
-    },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return v.toLocaleString();}}}}}
+  makeChart('sessionChart', {
+    type: 'bar',
+    data: {labels, datasets: [
+      {label: '最高収支', data: DATA.map(s => Math.max(...s.pay)), backgroundColor: css('--green') + 'aa', borderRadius: 2},
+      {label: '最低収支', data: DATA.map(s => Math.min(...s.pay)), backgroundColor: css('--red') + 'aa', borderRadius: 2}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: yenAxis, x: {stacked: true, ticks: dateTicks}}}
   });
 }
 
-function renderStats(){
-  var rankClass=['gold','silver','bronze'];
-  var html='';
-  for(var i=0;i<players.length;i++){
-    var p=players[i];
-    var rc=rankClass[i]||'';
-    var tc=playerTotals[p]>=0?'#1D9E75':'#D85A30';
-    html+='<div class="rank-row">';
-    html+='<div class="rank-num '+rc+'">'+(i+1)+'</div>';
-    html+='<div class="rank-avatar" style="background:'+col(p)+'22;color:'+col(p)+'">'+p[0]+'</div>';
-    html+='<div class="rank-info"><div class="rank-name">'+p+'</div><div class="rank-detail">🥇'+rankRate(p,1)+'% 🥈'+rankRate(p,2)+'% 🥉'+rankRate(p,3)+'% 💀'+rankRate(p,4)+'% · 飛'+tobiRate(p)+'%</div></div>';
-    html+='<div class="rank-score"><div class="rank-score-val" style="color:'+tc+'">'+fmt(playerTotals[p])+'</div><div class="rank-score-sub">円</div></div>';
-    html+='</div>';
-  }
-  document.getElementById('stats-list').innerHTML=html;
+// ---------- 統計 ----------
+function renderStats() {
+  document.getElementById('stats-list').innerHTML = players.map((p, i) => {
+    const a = ALL[p];
+    return '<div class="row">' + rankNum(i) + avatar(p) +
+      '<div class="info"><div class="name">' + esc(p) + '</div><div class="sub num">🥇' + pct(a.rk[1], a.n) + '% 🥈' + pct(a.rk[2], a.n) + '% 🥉' + pct(a.rk[3], a.n) + '% 💀' + pct(a.rk[4], a.n) + '% · 飛' + pct(a.tobi, a.n) + '%</div></div>' +
+      '<div class="right"><div class="amount num">' + a.avg.toFixed(2) + '<small>位</small></div><div class="sub">' + a.n + '半荘</div></div></div>';
+  }).join('');
 
-  var ctx3=document.getElementById('winChart').getContext('2d');
-  if(window._wc) window._wc.destroy();
-  window._wc=new Chart(ctx3,{
-    type:'bar',
-    data:{
-      labels:players,
-      datasets:[
-        {label:'🥇1位',data:players.map(function(p){return rankRate(p,1);}),backgroundColor:'rgba(186,117,23,0.85)',borderRadius:3},
-        {label:'🥈2位',data:players.map(function(p){return rankRate(p,2);}),backgroundColor:'rgba(136,135,128,0.75)',borderRadius:3},
-        {label:'🥉3位',data:players.map(function(p){return rankRate(p,3);}),backgroundColor:'rgba(153,60,29,0.65)',borderRadius:3},
-        {label:'💀4位',data:players.map(function(p){return rankRate(p,4);}),backgroundColor:'rgba(90,90,90,0.45)',borderRadius:3}
-      ]
-    },
-    options:{
-      responsive:true,maintainAspectRatio:false,indexAxis:'y',
-      plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12}}},
-      scales:{
-        x:{stacked:true,max:100,ticks:{callback:function(v){return v+'%';}}},
-        y:{stacked:true}
-      }
-    }
+  const chips = players.slice().sort((a, b) => ALL[b].chip - ALL[a].chip);
+  document.getElementById('chip-stats').innerHTML = barRows(chips.map(p => ({label: p, v: ALL[p].chip, text: sgn(ALL[p].chip) + '枚'})), e => col(e.label));
+
+  const h = Math.max(220, players.length * 24 + 70);
+  document.getElementById('winChartWrap').style.height = h + 'px';
+  document.getElementById('avgChartWrap').style.height = h + 'px';
+  const rateSet = (r, label, color) => ({label, data: players.map(p => pct(ALL[p].rk[r], ALL[p].n)), backgroundColor: color, borderRadius: 2});
+  makeChart('winChart', {
+    type: 'bar',
+    data: {labels: players, datasets: [rateSet(1, '1着', css('--green')), rateSet(2, '2着', css('--silver') + 'aa'), rateSet(3, '3着', css('--silver') + '66'), rateSet(4, '4着', css('--red'))]},
+    options: {responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: {legend: {position: 'bottom', labels: {boxWidth: 12}}, tooltip: {callbacks: {label: c => c.dataset.label + ' ' + c.parsed.x + '%'}}},
+      scales: {x: {stacked: true, max: 100, ticks: {callback: v => v + '%'}}, y: {stacked: true}}}
   });
-
-  var ctx4=document.getElementById('avgRankChart').getContext('2d');
-  if(window._ac) window._ac.destroy();
-  window._ac=new Chart(ctx4,{
-    type:'bar',
-    data:{
-      labels:players,
-      datasets:[{label:'平均順位',data:players.map(function(p){return parseFloat(avgRank(p));}),backgroundColor:players.map(function(p){return col(p)+'99';}),borderRadius:4}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{min:1,max:4,ticks:{callback:function(v){return v+'位';}}}}}
-  });
-
-  // チップ統計
-  var chipHtml='';
-  var sorted_chip=players.slice().sort(function(a,b){return playerChips[b]-playerChips[a];});
-  for(var i=0;i<sorted_chip.length;i++){
-    var p=sorted_chip[i];
-    var chips=playerChips[p];
-    var pct=Math.max(0,Math.min(100,Math.abs(chips)/Math.max.apply(null,sorted_chip.map(function(q){return Math.abs(playerChips[q]);}||1))*100));
-    chipHtml+='<div style="margin-bottom:10px;">';
-    chipHtml+='<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">';
-    chipHtml+='<span style="font-weight:600;color:'+col(p)+'">'+p+'</span>';
-    chipHtml+='<span style="font-weight:600;color:'+(chips>=0?'var(--green)':'var(--red)')+'">'+fmtS(chips)+'枚</span>';
-    chipHtml+='</div>';
-    chipHtml+='<div style="height:8px;border-radius:4px;background:var(--bg3);overflow:hidden;">';
-    chipHtml+='<div style="height:100%;width:'+pct+'%;border-radius:4px;background:'+(chips>=0?'var(--green)':'var(--red)')+';"></div>';
-    chipHtml+='</div></div>';
-  }
-  document.getElementById('chip-stats').innerHTML=chipHtml;
-}
-
-function renderYearly(){
-  // 年度別ランキングテーブル
-  var html='';
-  for(var yi=0;yi<years.length;yi++){
-    var year=years[yi];
-    var ydata=yearlyData[year];
-    var yplayers=Object.keys(ydata).sort(function(a,b){return ydata[b]-ydata[a];});
-    html+='<div style="margin-bottom:1.5rem;">';
-    html+='<div style="font-size:13px;font-weight:600;color:var(--text3);letter-spacing:0.06em;margin-bottom:8px;">'+year+'年</div>';
-    for(var pi=0;pi<yplayers.length;pi++){
-      var p=yplayers[pi];
-      var val=ydata[p];
-      var tc=val>=0?'var(--green)':'var(--red)';
-      html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:13px;">';
-      html+='<span style="display:flex;align-items:center;gap:8px;">';
-      html+='<span style="width:28px;height:28px;border-radius:50%;background:'+col(p)+'22;color:'+col(p)+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">'+p[0]+'</span>';
-      html+='<span style="font-weight:600;color:var(--text)">'+p+'</span></span>';
-      html+='<span style="font-weight:600;color:'+tc+'">'+fmt(val)+'円</span>';
-      html+='</div>';
-    }
-    html+='</div>';
-  }
-  document.getElementById('yearly-content').innerHTML=html;
-
-  // 年度別グラフ
-  var ctx=document.getElementById('yearlyChart').getContext('2d');
-  if(window._yc) window._yc.destroy();
-  window._yc=new Chart(ctx,{
-    type:'bar',
-    data:{
-      labels:years.map(function(y){return y+'年';}),
-      datasets:players.map(function(p){
-        return{
-          label:p,
-          data:years.map(function(y){return yearlyData[y]&&yearlyData[y][p]?yearlyData[y][p]:0;}),
-          backgroundColor:col(p)+'99',
-          borderRadius:4
-        };
-      })
-    },
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{
-        x:{stacked:false},
-        y:{ticks:{callback:function(v){return v.toLocaleString();}}}
-      }
-    }
+  const byAvg = players.slice().sort((a, b) => ALL[a].avg - ALL[b].avg);
+  makeChart('avgRankChart', {
+    type: 'bar',
+    data: {labels: byAvg, datasets: [{data: byAvg.map(p => +ALL[p].avg.toFixed(2)), backgroundColor: byAvg.map(p => col(p) + 'bb'), borderRadius: 3}]},
+    options: {responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: {legend: {display: false}}, scales: {x: {min: 1, max: 4, ticks: {callback: v => v + '位'}}}}
   });
 }
 
-function renderHistory(){
-  var sorted=allData.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
-  var html='';
-  for(var i=0;i<sorted.length;i++){
-    var sess=sorted[i];
-    var maxP=Math.max.apply(null,sess.payouts);
-    var minP=Math.min.apply(null,sess.payouts);
-    html+='<div class="history-card">';
-    html+='<div class="history-header"><span class="history-date">'+sess.date+'</span><span class="history-games">'+sess.games+'局 · '+sess.players.join('/')+'</span></div>';
-    html+='<div class="history-body">';
-    for(var j=0;j<sess.players.length;j++){
-      var p=sess.players[j];
-      var pay=sess.payouts[j];
-      var payColor=pay>=0?'#1D9E75':'#D85A30';
-      var badge='';
-      if(pay===maxP) badge='<span class="badge badge-top">TOP</span>';
-      else if(pay===minP) badge='<span class="badge badge-bot">LAST</span>';
-      html+='<div class="history-row">';
-      html+='<span style="color:'+col(p)+';font-weight:600;font-size:13px">'+p+'</span>';
-      html+='<span style="color:#9b9b97">スコア '+fmtS(sess.scores[j])+'</span>';
-      html+='<span style="color:'+payColor+';font-weight:600">'+fmt(pay)+'円'+badge+'</span>';
-      html+='</div>';
-    }
-    html+='</div></div>';
-  }
-  document.getElementById('history-list').innerHTML=html;
+// ---------- 年度別 ----------
+function renderYearly() {
+  const y = {};
+  DATA.forEach(s => { const k = s.date.slice(0, 4); y[k] = y[k] || {}; s.players.forEach((p, i) => y[k][p] = (y[k][p] || 0) + s.pay[i]); });
+  document.getElementById('yearly-content').innerHTML = Object.keys(y).sort().reverse().map(k => {
+    const ps = Object.keys(y[k]).sort((a, b) => y[k][b] - y[k][a]);
+    return '<div class="year-block"><div class="year-title">' + k + '年</div><div class="list">' + ps.map((p, i) =>
+      '<div class="row">' + rankNum(i) + avatar(p, 30) + '<div class="info"><div class="name" style="font-size:14px">' + esc(p) + '</div></div><div class="right"><div class="amount num ' + cls(y[k][p]) + '" style="font-size:15px">' + yen(y[k][p]) + '<small>円</small></div></div></div>').join('') + '</div></div>';
+  }).join('');
+}
+
+// ---------- 履歴 ----------
+function renderHistory() {
+  document.getElementById('history-list').innerHTML = DATA.slice().reverse().map(s => {
+    const maxP = Math.max(...s.pay), minP = Math.min(...s.pay);
+    const order = s.players.map((p, i) => i).sort((a, b) => s.pay[b] - s.pay[a]);
+    return '<div class="history-card"><div class="history-header"><span class="d num">' + s.date + '</span><span class="g">' + s.games.length + '半荘</span></div><div class="history-body">' +
+      order.map(i => {
+        const p = s.players[i], pay = s.pay[i];
+        const badge = pay === maxP ? '<span class="badge badge-top">TOP</span>' : pay === minP ? '<span class="badge badge-bot">LAST</span>' : '';
+        return '<div class="history-row"><span style="color:' + col(p) + ';font-weight:700">' + esc(p) + badge + '</span>' +
+          '<span class="s num">スコア ' + sgn(s.sc[i]) + ' · チップ ' + sgn(s.chips[i]) + '</span>' +
+          '<span class="num ' + cls(pay) + '" style="font-weight:700;text-align:right;min-width:72px">' + yen(pay) + '円</span></div>';
+      }).join('') + '</div></div>';
+  }).join('');
 }
 
 renderRanking();
+// ダークモード切替時はグラフを描き直す
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  Object.keys(rendered).forEach(k => rendered[k] = false);
+  const active = document.querySelector('.tab.active').dataset.page;
+  if (active !== 'ranking') showPage(active);
+});
 </script>
 </body>
-</html>""")
+</html>
+"""
 
-    html = ''.join(html_parts)
+
+def generate_html(sessions, output_path):
+    updated_at = datetime.now(JST).strftime('%Y/%m/%d %H:%M')
+    date_range = (sessions[0]['date'] + ' 〜 ' + sessions[-1]['date']) if sessions else ''
+    data_json = json.dumps(sessions, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
+    html = (TEMPLATE
+            .replace('__SESSION_COUNT__', str(len(sessions)))
+            .replace('__DATE_RANGE__', date_range)
+            .replace('__UPDATED_AT__', updated_at)
+            .replace('__DATA__', data_json))
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html)
     print("✅ ダッシュボードを生成しました: " + output_path)
-    print("   セッション数: " + str(session_count))
+    print("   セッション数: " + str(len(sessions)))
     print("   期間: " + date_range)
 
 
 if __name__ == '__main__':
-    score_dir = sys.argv[1] if len(sys.argv) >= 2 else os.path.join(os.path.dirname(os.path.abspath(__file__)), 'SCORE')
-    output_path = sys.argv[2] if len(sys.argv) >= 3 else os.path.join(os.path.dirname(os.path.abspath(__file__)), '麻雀ダッシュボード.html')
+    here = os.path.dirname(os.path.abspath(__file__))
+    score_dir = sys.argv[1] if len(sys.argv) >= 2 else os.path.join(here, 'SCORE')
+    output_path = sys.argv[2] if len(sys.argv) >= 3 else os.path.join(here, 'mahjong_dashboard.html')
 
     if not os.path.isdir(score_dir):
         print("❌ フォルダが見つかりません: " + score_dir, file=sys.stderr)

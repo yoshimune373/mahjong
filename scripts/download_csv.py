@@ -22,14 +22,19 @@ def main():
 
     os.makedirs('score_data', exist_ok=True)
 
-    # mimeTypeを限定しないで全ファイルを取得してみる
-    results = service.files().list(
-        q="'" + folder_id + "' in parents and trashed=false",
-        fields="files(id, name, mimeType)",
-        pageSize=100
-    ).execute()
-
-    files = results.get('files', [])
+    # mimeTypeを限定しないで全ファイルを取得（100件超もページングで全件）
+    files, page_token = [], None
+    while True:
+        results = service.files().list(
+            q="'" + folder_id + "' in parents and trashed=false",
+            fields="nextPageToken, files(id, name, mimeType)",
+            pageSize=1000,
+            pageToken=page_token
+        ).execute()
+        files.extend(results.get('files', []))
+        page_token = results.get('nextPageToken')
+        if not page_token:
+            break
     print("Total files in folder: " + str(len(files)))
     for f in files:
         print("  - " + f['name'] + " (" + f['mimeType'] + ")")

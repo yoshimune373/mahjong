@@ -3,509 +3,519 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🀄 麻雀スコアダッシュボード</title>
+<title>麻雀スコア</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🀄</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
-  --bg:#fff;--bg2:#f5f5f3;--bg3:#eeede8;
-  --text:#1a1a18;--text2:#6b6b67;--text3:#9b9b97;
-  --border:rgba(0,0,0,0.1);--border2:rgba(0,0,0,0.2);
-  --green:#1D9E75;--red:#D85A30;
+  --bg:#ffffff;--bg2:#f5f5f2;--bg3:#ecebe6;--page:#e7e6e0;
+  --text:#1a1a18;--text2:#5f5f5b;--text3:#8e8e89;
+  --border:rgba(0,0,0,0.09);--border2:rgba(0,0,0,0.18);
+  --green:#17845F;--red:#C94F27;--gold:#B06E12;--silver:#7d7c76;--bronze:#93401f;
+  --green-bg:rgba(23,132,95,0.12);--red-bg:rgba(201,79,39,0.12);
+  --accent:#1a1a18;--on-accent:#ffffff;
 }
-@media(prefers-color-scheme:dark){
+@media (prefers-color-scheme:dark){
   :root{
-    --bg:#1c1c1a;--bg2:#252523;--bg3:#2e2e2c;
-    --text:#f0efe8;--text2:#9b9b97;--text3:#6b6b67;
-    --border:rgba(255,255,255,0.1);--border2:rgba(255,255,255,0.2);
-    --green:#5DCAA5;--red:#F0997B;
+    --bg:#1c1c1a;--bg2:#252523;--bg3:#30302d;--page:#121211;
+    --text:#f0efe8;--text2:#a8a8a2;--text3:#76766f;
+    --border:rgba(255,255,255,0.09);--border2:rgba(255,255,255,0.2);
+    --green:#5DCAA5;--red:#F0997B;--gold:#E3A64A;--silver:#b5b4ad;--bronze:#d9825e;
+    --green-bg:rgba(93,202,165,0.15);--red-bg:rgba(240,153,123,0.15);
+    --accent:#f0efe8;--on-accent:#1c1c1a;
   }
 }
-body{font-family:-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;background:var(--bg3);color:var(--text);}
-.app{max-width:480px;margin:0 auto;background:var(--bg);min-height:100vh;}
-.header{padding:1rem 1rem 0.75rem;background:var(--bg);border-bottom:0.5px solid var(--border);position:sticky;top:0;z-index:10;}
-.header h1{font-size:20px;font-weight:600;}
-.header p{font-size:12px;color:var(--text2);margin-top:2px;}
-.updated{font-size:10px;color:var(--text3);margin-top:2px;}
-.tabs{display:flex;gap:4px;padding:0.75rem 1rem;overflow-x:auto;scrollbar-width:none;border-bottom:0.5px solid var(--border);}
+html{-webkit-text-size-adjust:100%;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic UI','Meiryo',sans-serif;background:var(--page);color:var(--text);font-feature-settings:"palt";}
+.num{font-variant-numeric:tabular-nums;}
+.app{max-width:520px;margin:0 auto;background:var(--bg);min-height:100vh;}
+.top{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:0.5px solid var(--border);}
+.header{padding:14px 16px 6px;}
+.header h1{font-size:19px;font-weight:700;letter-spacing:0.02em;}
+.header .meta{font-size:12px;color:var(--text2);margin-top:3px;}
+.tabs{display:flex;gap:6px;padding:8px 16px 10px;overflow-x:auto;scrollbar-width:none;}
 .tabs::-webkit-scrollbar{display:none;}
-.tab{flex-shrink:0;font-size:13px;padding:6px 14px;border-radius:20px;border:0.5px solid var(--border2);cursor:pointer;color:var(--text2);background:transparent;transition:all 0.15s;font-family:inherit;}
-.tab.active{background:var(--text);color:var(--bg);border-color:var(--text);}
-.content{padding-bottom:2rem;}
-.section{padding:1rem 1rem 0;}
-.section-title{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:0.75rem;}
+.tab{flex-shrink:0;font-size:13px;padding:6px 14px;border-radius:999px;border:0.5px solid var(--border2);cursor:pointer;color:var(--text2);background:transparent;font-family:inherit;transition:background .15s,color .15s;}
+.tab.active{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:600;}
+.content{padding-bottom:40px;}
+.section{padding:18px 16px 0;}
+.section-title{font-size:12px;font-weight:700;color:var(--text3);letter-spacing:0.06em;margin-bottom:10px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.section-title .hint{font-weight:400;letter-spacing:0;font-size:11px;}
 .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
-.metric{background:var(--bg2);border-radius:8px;padding:0.75rem 1rem;}
+.metric{background:var(--bg2);border-radius:10px;padding:12px 14px;}
 .metric-label{font-size:11px;color:var(--text2);margin-bottom:4px;}
-.metric-value{font-size:22px;font-weight:600;color:var(--text);}
-.metric-value.pos{color:var(--green);}.metric-value.neg{color:var(--red);}
+.metric-value{font-size:22px;font-weight:700;}
 .metric-sub{font-size:11px;color:var(--text3);margin-top:2px;}
-.ranking{display:flex;flex-direction:column;gap:8px;}
-.rank-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border:0.5px solid var(--border);border-radius:12px;cursor:pointer;}
-.rank-row:active{background:var(--bg2);}
-.rank-num{font-size:14px;font-weight:600;color:var(--text3);width:20px;flex-shrink:0;text-align:center;}
-.rank-num.gold{color:#BA7517;}.rank-num.silver{color:#888780;}.rank-num.bronze{color:#993C1D;}
-.rank-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;flex-shrink:0;}
-.rank-info{flex:1;min-width:0;}
-.rank-name{font-size:15px;font-weight:600;color:var(--text);}
-.rank-detail{font-size:11px;color:var(--text2);margin-top:1px;}
-.rank-score{text-align:right;flex-shrink:0;}
-.rank-score-val{font-size:16px;font-weight:600;}
-.rank-score-sub{font-size:11px;color:var(--text2);}
-.chart-wrap{position:relative;width:100%;height:240px;margin-top:0.5rem;}
+.pos{color:var(--green);}.neg{color:var(--red);}.zero{color:var(--text2);}
+.list{display:flex;flex-direction:column;gap:8px;}
+.row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border:0.5px solid var(--border);border-radius:12px;}
+.row.click{cursor:pointer;}
+.row.click:hover{background:var(--bg2);}
+.rank-num{font-size:14px;font-weight:700;color:var(--text3);width:22px;flex-shrink:0;text-align:center;}
+.rank-num.r1{color:var(--gold);}.rank-num.r2{color:var(--silver);}.rank-num.r3{color:var(--bronze);}
+.avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;}
+.info{flex:1;min-width:0;}
+.name{font-size:15px;font-weight:700;}
+.sub{font-size:11px;color:var(--text2);margin-top:2px;line-height:1.45;}
+.right{text-align:right;flex-shrink:0;}
+.amount{font-size:16px;font-weight:700;}
+.amount small{font-size:11px;font-weight:600;margin-left:1px;}
+.chip-pill{display:inline-block;margin-top:3px;font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--bg2);}
+.chart-wrap{position:relative;width:100%;height:260px;}
 .page{display:none;}.page.show{display:block;}
-.detail-view{display:none;}.detail-view.show{display:block;}
-.overview-view.hidden{display:none;}
-.back-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);background:none;border:none;cursor:pointer;padding:0.75rem 1rem 0.25rem;font-family:inherit;}
-.stat-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--border);font-size:13px;}
+.hidden{display:none !important;}
+.back-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);background:none;border:none;cursor:pointer;padding:14px 16px 0;font-family:inherit;}
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--border);font-size:13px;gap:8px;}
 .stat-row:last-child{border-bottom:none;}
-.stat-label{color:var(--text2);}.stat-val{font-weight:600;color:var(--text);}
-.stat-val.pos{color:var(--green);}.stat-val.neg{color:var(--red);}
-.history-list{display:flex;flex-direction:column;gap:10px;}
+.stat-label{color:var(--text2);}.stat-val{font-weight:700;}
+.stat-group{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.06em;padding:14px 0 2px;}
+.seg{display:inline-flex;background:var(--bg2);border-radius:9px;padding:3px;gap:2px;}
+.seg button{border:none;background:transparent;font-family:inherit;font-size:13px;color:var(--text2);padding:6px 12px;border-radius:7px;cursor:pointer;}
+.seg button.on{background:var(--bg);color:var(--text);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,0.12);}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.note{font-size:11px;color:var(--text3);margin-top:8px;line-height:1.6;}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.legend button{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);background:var(--bg2);border:none;border-radius:999px;padding:4px 10px;cursor:pointer;font-family:inherit;}
+.legend button.off{opacity:0.4;}
+.legend .dot{width:9px;height:9px;border-radius:50%;}
+.legend-actions{display:flex;gap:10px;margin-bottom:8px;}
+.linkbtn{background:none;border:none;color:var(--text2);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;padding:0;}
+.form{display:flex;gap:4px;flex-wrap:wrap;}
+.form span{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+.f1{background:var(--green-bg);color:var(--green);}.f2,.f3{background:var(--bg2);color:var(--text2);}.f4{background:var(--red-bg);color:var(--red);}
 .history-card{border:0.5px solid var(--border);border-radius:12px;overflow:hidden;}
-.history-header{padding:8px 12px;background:var(--bg2);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;}
-.history-date{font-size:12px;color:var(--text2);}.history-games{font-size:11px;color:var(--text3);}
-.history-body{padding:8px 12px;}
-.history-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;border-bottom:0.5px solid var(--border);}
+.history-header{padding:8px 12px;background:var(--bg2);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;font-size:12px;}
+.history-header .d{font-weight:700;}.history-header .g{color:var(--text3);}
+.history-body{padding:4px 12px;}
+.history-row{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;font-size:13px;padding:6px 0;border-bottom:0.5px solid var(--border);}
 .history-row:last-child{border-bottom:none;}
-.badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:600;}
-.badge-top{background:rgba(29,158,117,0.15);color:var(--green);}
-.badge-bot{background:rgba(216,90,48,0.15);color:var(--red);}
-.legend-wrap{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:0.75rem;}
-.legend-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);}
-.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.history-row .s{color:var(--text3);font-size:12px;}
+.badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:700;vertical-align:1px;}
+.badge-top{background:var(--green-bg);color:var(--green);}
+.badge-bot{background:var(--red-bg);color:var(--red);}
+.bar{height:8px;border-radius:4px;background:var(--bg3);overflow:hidden;}
+.bar div{height:100%;border-radius:4px;}
+.bar-row{margin-bottom:10px;}
+.bar-row .top-line{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;font-weight:700;}
+.year-block{margin-bottom:20px;}
+.year-title{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:6px;}
 </style>
 </head>
 <body>
 <div class="app">
-  <div class="header">
-    <h1>🀄 麻雀スコア</h1>
-    <p>全73セッション · 2025/03/13 〜 2026/10/12</p>
-    <p class="updated">更新: 2026/10/13 00:37</p>
-  </div>
-  <div class="tabs">
-    <button class="tab active" onclick="showPage('ranking',this)">ランキング</button>
-    <button class="tab" onclick="showPage('trend',this)">推移</button>
-    <button class="tab" onclick="showPage('stats',this)">統計</button>
-    <button class="tab" onclick="showPage('yearly',this)">年度別</button>
-    <button class="tab" onclick="showPage('history',this)">履歴</button>
+  <div class="top">
+    <div class="header">
+      <h1>🀄 麻雀スコア</h1>
+      <div class="meta num">全72セッション · 2025/03/13 〜 2026/10/12</div>
+      <div class="meta num" style="color:var(--text3);font-size:11px">更新 2026/10/13 09:39</div>
+    </div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-page="ranking">ランキング</button>
+      <button class="tab" data-page="recent">直近成績</button>
+      <button class="tab" data-page="trend">推移</button>
+      <button class="tab" data-page="stats">統計</button>
+      <button class="tab" data-page="yearly">年度別</button>
+      <button class="tab" data-page="history">履歴</button>
+    </div>
   </div>
   <div class="content">
     <div id="page-ranking" class="page show">
-      <div id="overview-view" class="overview-view">
-        <div class="section"><div class="section-title">総合収支ランキング</div><div class="ranking" id="ranking-list"></div></div>
-        <div class="section"><div class="section-title">累計収支の推移（円）</div><div id="rank-legend" class="legend-wrap"></div><div class="chart-wrap"><canvas id="rankChart"></canvas></div></div>
+      <div id="overview-view">
+        <div class="section"><div class="section-title"><span>総合収支ランキング</span><span class="hint">タップで個人成績</span></div><div class="list" id="ranking-list"></div></div>
       </div>
-      <div id="detail-view" class="detail-view">
-        <button class="back-btn" onclick="showOverview()">← 一覧へ戻る</button>
+      <div id="detail-view" class="hidden">
+        <button class="back-btn" id="back-btn">← 一覧へ戻る</button>
         <div class="section"><div class="grid2" id="detail-metrics"></div></div>
+        <div class="section"><div class="section-title">直近10半荘の着順（右が最新）</div><div class="form" id="detail-form"></div></div>
         <div class="section"><div class="section-title">対戦成績詳細</div><div id="detail-stats"></div></div>
         <div class="section"><div class="section-title">収支の累計推移</div><div class="chart-wrap"><canvas id="detailChart"></canvas></div></div>
         <div class="section"><div class="section-title">年度別収支</div><div id="detail-yearly"></div></div>
       </div>
     </div>
+
+    <div id="page-recent" class="page">
+      <div class="section">
+        <div class="controls">
+          <div class="seg" id="recent-n"><button data-v="10" class="on">直近10</button><button data-v="30">30</button><button data-v="50">50</button><button data-v="0">全部</button></div>
+          <div class="seg" id="recent-unit"><button data-v="game" class="on">半荘</button><button data-v="session">セッション</button></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-title"><span id="recent-title"></span>
+          <span class="seg" id="recent-sort" style="font-size:12px"><button data-v="pay" class="on">収支</button><button data-v="avg">着順</button><button data-v="chip">チップ</button></span>
+        </div>
+        <div class="list" id="recent-list"></div>
+        <p class="note" id="recent-note"></p>
+      </div>
+    </div>
+
     <div id="page-trend" class="page">
-      <div class="section"><div class="section-title">累計収支の推移</div><div id="trend-legend" class="legend-wrap"></div><div class="chart-wrap" style="height:280px"><canvas id="trendChart"></canvas></div></div>
-      <div class="section"><div class="section-title">セッション別 最高/最低収支</div><div class="chart-wrap" style="height:280px"><canvas id="sessionChart"></canvas></div></div>
+      <div class="section">
+        <div class="section-title"><span>累計収支の推移（円）</span></div>
+        <div class="legend-actions"><button class="linkbtn" data-legend-all="trend">全員表示</button><button class="linkbtn" data-legend-top="trend">参加の多い6人</button></div>
+        <div class="legend" id="trend-legend"></div>
+        <div class="chart-wrap" style="height:300px"><canvas id="trendChart"></canvas></div>
+      </div>
+      <div class="section"><div class="section-title">セッション別 最高 / 最低収支</div><div class="chart-wrap" style="height:240px"><canvas id="sessionChart"></canvas></div></div>
     </div>
+
     <div id="page-stats" class="page">
-      <div class="section"><div class="section-title">プレイヤー別成績</div><div class="ranking" id="stats-list"></div></div>
-      <div class="section" style="margin-top:0.5rem"><div class="section-title">累計チップ</div><div id="chip-stats"></div></div>
-      <div class="section"><div class="section-title">順位獲得率（積み上げ）</div><div class="chart-wrap" style="height:220px"><canvas id="winChart"></canvas></div></div>
-      <div class="section"><div class="section-title">平均順位（低いほど良い）</div><div class="chart-wrap" style="height:220px"><canvas id="avgRankChart"></canvas></div></div>
+      <div class="section"><div class="section-title"><span>プレイヤー別成績</span><span class="hint">着順率は半荘単位</span></div><div class="list" id="stats-list"></div></div>
+      <div class="section"><div class="section-title">累計チップ</div><div id="chip-stats"></div></div>
+      <div class="section"><div class="section-title">着順率（半荘単位）</div><div class="chart-wrap" id="winChartWrap"><canvas id="winChart"></canvas></div></div>
+      <div class="section"><div class="section-title">平均着順（低いほど良い）</div><div class="chart-wrap" id="avgChartWrap"><canvas id="avgRankChart"></canvas></div></div>
     </div>
+
     <div id="page-yearly" class="page">
       <div class="section"><div class="section-title">年度別収支</div><div id="yearly-content"></div></div>
-      <div class="section"><div class="section-title">年度別収支グラフ</div><div class="chart-wrap" style="height:280px"><canvas id="yearlyChart"></canvas></div></div>
     </div>
+
     <div id="page-history" class="page">
-      <div class="section"><div class="section-title">対戦履歴（新しい順）</div><div class="history-list" id="history-list"></div></div>
+      <div class="section"><div class="section-title">対戦履歴（新しい順）</div><div class="list" id="history-list"></div></div>
     </div>
   </div>
 </div>
 <script>
-const COLORS={'南':'#378ADD','林':'#1D9E75','関河':'#D85A30','古川':'#D4537E','熊坂':'#7F77DD','矢田':'#BA7517','西村':'#888780','鎌田':'#639922','藤田':'#993C1D'};
-const allData=[{"date": "2025/03/13", "players": ["南", "林", "藤田", "関河"], "scores": [-120, 49, 50, 21], "payouts": [-6000, 2450, 2500, 1050], "chips": [20, 20, 20, 20], "games": 4, "game_ranks": {"南": {"1": 0, "2": 1, "3": 1, "4": 2}, "林": {"1": 1, "2": 1, "3": 2, "4": 0}, "藤田": {"1": 2, "2": 0, "3": 1, "4": 1}, "関河": {"1": 1, "2": 2, "3": 0, "4": 1}}, "game_tobi": {"南": 2, "林": 0, "藤田": 1, "関河": 1}}, {"date": "2025/03/15", "players": ["南", "林", "藤田", "関河"], "scores": [-97, 79, -98, 116], "payouts": [-6050, 4550, -4200, 5700], "chips": [8, 26, 27, 19], "games": 3, "game_ranks": {"南": {"1": 0, "2": 1, "3": 1, "4": 1}, "林": {"1": 1, "2": 1, "3": 0, "4": 1}, "藤田": {"1": 0, "2": 0, "3": 2, "4": 1}, "関河": {"1": 2, "2": 1, "3": 0, "4": 0}}, "game_tobi": {"南": 1, "林": 1, "藤田": 0, "関河": 0}}, {"date": "2025/03/27", "players": ["南", "林", "藤田", "関河"], "scores": [-36, 110, -93, 19], "payouts": [-1800, 5700, -5350, 1450], "chips": [20, 22, 13, 25], "games": 4, "game_ranks": {"南": {"1": 0, "2": 2, "3": 1, "4": 1}, "林": {"1": 2, "2": 1, "3": 1, "4": 0}, "藤田": {"1": 0, "2": 1, "3": 2, "4": 1}, "関河": {"1": 2, "2": 0, "3": 0, "4": 2}}, "game_tobi": {"南": 1, "林": 0, "藤田": 1, "関河": 1}}, {"date": "2025/04/24", "players": ["南", "林", "藤田", "関河"], "scores": [-30, 32, 11, -13], "payouts": [-2300, 1000, 750, 550], "chips": [12, 14, 22, 32], "games": 4, "game_ranks": {"南": {"1": 1, "2": 0, "3": 2, "4": 1}, "林": {"1": 1, "2": 2, "3": 0, "4": 1}, "藤田": {"1": 1, "2": 1, "3": 1, "4": 1}, "関河": {"1": 1, "2": 1, "3": 1, "4": 1}}, "game_tobi": {"南": 0, "林": 0, "藤田": 0, "関河": 1}}, {"date": "2025/04/25", "players": ["南", "古川", "西村", "鎌田"], "scores": [-161, 106, 68, -13], "payouts": [-9850, 7100, 4100, -1350], "chips": [-18, 18, 7, -7], "games": 4, "game_ranks": {"南": {"1": 0, "2": 0, "3": 1, "4": 3}, "古川": {"1": 1, "2": 3, "3": 0, "4": 0}, "西村": {"1": 2, "2": 1, "3": 0, "4": 1}, "鎌田": {"1": 1, "2": 0, "3": 3, "4": 0}}, "game_tobi": {"南": 2, "古川": 0, "西村": 0, "鎌田": 0}}, {"date": "2025/05/13", "players": ["南", "林", "藤田", "関河"], "scores": [-101, 135, -67, 33], "payouts": [-5300, 7300, -3900, 1900], "chips": [15, 31, 9, 25], "games": 4, "game_ranks": {"南": {"1": 0, "2": 0, "3": 3, "4": 1}, "林": {"1": 2, "2": 2, "3": 0, "4": 0}, "藤田": {"1": 1, "2": 0, "3": 1, "4": 2}, "関河": {"1": 1, "2": 2, "3": 0, "4": 1}}, "game_tobi": {"南": 0, "林": 0, "藤田": 1, "関河": 0}}, {"date": "2025/06/04", "players": ["南", "林", "藤田", "関河"], "scores": [-60, 64, -59, 55], "payouts": [-3600, 2800, -3150, 3950], "chips": [14, 16, 18, 32], "games": 8, "game_ranks": {"南": {"1": 0, "2": 4, "3": 2, "4": 2}, "林": {"1": 3, "2": 2, "3": 1, "4": 2}, "藤田": {"1": 2, "2": 2, "3": 1, "4": 3}, "関河": {"1": 3, "2": 0, "3": 4, "4": 1}}, "game_tobi": {"南": 0, "林": 1, "藤田": 3, "関河": 1}}, {"date": "2025/06/12", "players": ["南", "古川", "林", "関河"], "scores": [74, -31, 37, -80], "payouts": [4900, -2150, 1250, -4000], "chips": [32, 14, 14, 20], "games": 5, "game_ranks": {"南": {"1": 2, "2": 2, "3": 0, "4": 1}, "古川": {"1": 1, "2": 0, "3": 3, "4": 1}, "林": {"1": 1, "2": 3, "3": 0, "4": 1}, "関河": {"1": 1, "2": 0, "3": 2, "4": 2}}, "game_tobi": {"南": 0, "古川": 0, "林": 0, "関河": 0}}, {"date": "2025/07/04", "players": ["南", "古川", "熊坂", "矢田"], "scores": [175, -139, -119, 83], "payouts": [8850, -7850, -5150, 4150], "chips": [21, 11, 28, 20], "games": 4, "game_ranks": {"南": {"1": 3, "2": 0, "3": 1, "4": 0}, "古川": {"1": 0, "2": 1, "3": 1, "4": 2}, "熊坂": {"1": 0, "2": 0, "3": 2, "4": 2}, "矢田": {"1": 1, "2": 3, "3": 0, "4": 0}}, "game_tobi": {"南": 0, "古川": 2, "熊坂": 0, "矢田": 0}}, {"date": "2025/07/08", "players": ["南", "林", "矢田", "関河"], "scores": [-45, 110, -94, 29], "payouts": [-4750, 5000, -5600, 5350], "chips": [-5, 15, 11, 59], "games": 6, "game_ranks": {"南": {"1": 1, "2": 1, "3": 2, "4": 2}, "林": {"1": 3, "2": 0, "3": 3, "4": 0}, "矢田": {"1": 1, "2": 2, "3": 0, "4": 3}, "関河": {"1": 1, "2": 3, "3": 1, "4": 1}}, "game_tobi": {"南": 0, "林": 0, "矢田": 1, "関河": 1}}, {"date": "2025/08/12", "players": ["南", "古川", "林", "関河"], "scores": [-143, 132, 75, -64], "payouts": [-8750, 7500, 3350, -2100], "chips": [4, 29, 16, 31], "games": 6, "game_ranks": {"南": {"1": 0, "2": 2, "3": 0, "4": 4}, "古川": {"1": 2, "2": 3, "3": 0, "4": 1}, "林": {"1": 3, "2": 0, "3": 3, "4": 0}, "関河": {"1": 1, "2": 1, "3": 3, "4": 1}}, "game_tobi": {"南": 1, "古川": 1, "林": 0, "関河": 1}}, {"date": "2025/08/22", "players": ["南", "林", "藤田", "関河"], "scores": [187, 65, -56, -196], "payouts": [11250, 2550, -2700, -11100], "chips": [39, 13, 21, 7], "games": 7, "game_ranks": {"南": {"1": 4, "2": 1, "3": 1, "4": 1}, "林": {"1": 3, "2": 0, "3": 2, "4": 2}, "藤田": {"1": 0, "2": 5, "3": 1, "4": 1}, "関河": {"1": 0, "2": 1, "3": 3, "4": 3}}, "game_tobi": {"南": 1, "林": 0, "藤田": 1, "関河": 0}}, {"date": "2025/08/26", "players": ["南", "林", "熊坂", "関河"], "scores": [64, 28, -55, -37], "payouts": [4400, 1200, -3450, -2150], "chips": [12, -2, -7, -3], "games": 6, "game_ranks": {"南": {"1": 1, "2": 3, "3": 1, "4": 1}, "林": {"1": 1, "2": 2, "3": 2, "4": 1}, "熊坂": {"1": 1, "2": 1, "3": 3, "4": 1}, "関河": {"1": 3, "2": 0, "3": 0, "4": 3}}, "game_tobi": {"南": 0, "林": 0, "熊坂": 1, "関河": 3}}, {"date": "2025/09/04", "players": ["南", "林", "矢田", "関河"], "scores": [-109, 61, 55, -7], "payouts": [-6250, 4050, 2750, -550], "chips": [12, 30, 20, 18], "games": 5, "game_ranks": {"南": {"1": 0, "2": 1, "3": 3, "4": 1}, "林": {"1": 2, "2": 1, "3": 1, "4": 1}, "矢田": {"1": 2, "2": 1, "3": 1, "4": 1}, "関河": {"1": 1, "2": 2, "3": 0, "4": 2}}, "game_tobi": {"南": 1, "林": 0, "矢田": 0, "関河": 1}}, {"date": "2025/09/11", "players": ["南", "林", "熊坂", "西村"], "scores": [46, -33, -142, 129], "payouts": [1600, -1550, -8200, 8150], "chips": [-7, 1, -11, 17], "games": 3, "game_ranks": {"南": {"1": 1, "2": 1, "3": 1, "4": 0}, "林": {"1": 0, "2": 1, "3": 2, "4": 0}, "熊坂": {"1": 0, "2": 0, "3": 0, "4": 3}, "西村": {"1": 2, "2": 1, "3": 0, "4": 0}}, "game_tobi": {"南": 0, "林": 0, "熊坂": 1, "西村": 0}}, {"date": "2025/09/17", "players": ["南", "林", "矢田", "関河"], "scores": [-35, 40, -30, 25], "payouts": [-850, 2400, -2300, 750], "chips": [29, 24, 12, 15], "games": 4, "game_ranks": {"南": {"1": 0, "2": 2, "3": 1, "4": 1}, "林": {"1": 2, "2": 0, "3": 1, "4": 1}, "矢田": {"1": 0, "2": 2, "3": 1, "4": 1}, "関河": {"1": 2, "2": 0, "3": 1, "4": 1}}, "game_tobi": {"南": 0, "林": 0, "矢田": 0, "関河": 1}}, {"date": "2025/09/22", "players": ["南", "林", "西村", "関河"], "scores": [-78, -14, 132, -40], "payouts": [-5700, -600, 5800, 500], "chips": [2, 21, 12, 45], "games": 5, "game_ranks": {"南": {"1": 0, "2": 1, "3": 3, "4": 1}, "林": {"1": 2, "2": 0, "3": 1, "4": 2}, "西村": {"1": 2, "2": 2, "3": 1, "4": 0}, "関河": {"1": 1, "2": 2, "3": 0, "4": 2}}, "game_tobi": {"南": 0, "林": 0, "西村": 0, "関河": 1}}, {"date": "2025/09/26", "players": ["南", "熊坂", "矢田", "西村"], "scores": [-96, -84, 127, 53], "payouts": [-5400, -4000, 6550, 2850], "chips": [-6, 2, 2, 2], "games": 5, "game_ranks": {"南": {"1": 0, "2": 2, "3": 1, "4": 2}, "熊坂": {"1": 1, "2": 0, "3": 2, "4": 2}, "矢田": {"1": 3, "2": 1, "3": 0, "4": 1}, "西村": {"1": 1, "2": 2, "3": 2, "4": 0}}, "game_tobi": {"南": 1, "熊坂": 0, "矢田": 0, "西村": 0}}, {"date": "2025/10/08", "players": ["南", "林", "谷垣", "関河"], "scores": [-45, -87, 205, -73], "payouts": [-3550, -5350, 11650, -2750], "chips": [-13, -10, 14, 9], "games": 5, "game_ranks": {"南": {"1": 1, "2": 1, "3": 1, "4": 2}, "林": {"1": 0, "2": 2, "3": 2, "4": 1}, "谷垣": {"1": 3, "2": 1, "3": 1, "4": 0}, "関河": {"1": 1, "2": 1, "3": 1, "4": 2}}, "game_tobi": {"南": 0, "林": 1, "谷垣": 0, "関河": 1}}, {"date": "2025/10/09", "players": ["南", "林", "西村", "関河"], "scores": [1, 137, 119, -257], "payouts": [-950, 6850, 8950, -14850], "chips": [-10, 0, 30, -20], "games": 5, "game_ranks": {"南": {"1": 1, "2": 1, "3": 3, "4": 0}, "林": {"1": 2, "2": 2, "3": 1, "4": 0}, "西村": {"1": 2, "2": 2, "3": 1, "4": 0}, "関河": {"1": 0, "2": 0, "3": 0, "4": 5}}, "game_tobi": {"南": 0, "林": 0, "西村": 0, "関河": 2}}, {"date": "2025/10/10", "players": ["南", "古川", "林", "矢田"], "scores": [176, -132, -26, -18], "payouts": [8500, -8100, -3800, 3400], "chips": [-3, -15, -25, 43], "games": 6, "game_ranks": {"南": {"1": 3, "2": 2, "3": 1, "4": 0}, "古川": {"1": 0, "2": 1, "3": 4, "4": 1}, "林": {"1": 2, "2": 1, "3": 1, "4": 2}, "矢田": {"1": 1, "2": 2, "3": 0, "4": 3}}, "game_tobi": {"南": 0, "古川": 1, "林": 2, "矢田": 1}}, {"date": "2025/10/20", "players": ["南", "林", "矢田", "関河"], "scores": [-24, -38, 19, 43], "payouts": [-1200, -2600, 1450, 2350], "chips": [0, -7, 5, 2], "games": 5, "game_ranks": {"南": {"1": 2, "2": 1, "3": 1, "4": 1}, "林": {"1": 1, "2": 2, "3": 0, "4": 2}, "矢田": {"1": 1, "2": 0, "3": 4, "4": 0}, "関河": {"1": 1, "2": 2, "3": 0, "4": 2}}, "game_tobi": {"南": 0, "林": 1, "矢田": 0, "関河": 1}}, {"date": "2025/10/21", "players": ["南", "矢田", "西村", "関河"], "scores": [79, -143, -52, 116], "payouts": [4750, -8450, -3100, 6800], "chips": [8, -13, -5, 10], "games": 3, "game_ranks": {"南": {"1": 1, "2": 2, "3": 0, "4": 0}, "矢田": {"1": 0, "2": 0, "3": 1, "4": 2}, "西村": {"1": 0, "2": 0, "3": 2, "4": 1}, "関河": {"1": 2, "2": 1, "3": 0, "4": 0}}, "game_tobi": {"南": 0, "矢田": 2, "西村": 0, "関河": 0}}, {"date": "2025/11/07", "players": ["南", "林", "西村", "関河"], "scores": [-144, 71, -7, 80], "payouts": [-8200, 3550, -350, 5000], "chips": [-10, 0, 0, 10], "games": 5, "game_ranks": {"南": {"1": 1, "2": 1, "3": 1, "4": 2}, "林": {"1": 2, "2": 2, "3": 0, "4": 1}, "西村": {"1": 0, "2": 2, "3": 3, "4": 0}, "関河": {"1": 2, "2": 0, "3": 1, "4": 2}}, "game_tobi": {"南": 2, "林": 1, "西村": 0, "関河": 0}}, {"date": "2025/11/13", "players": ["南", "古川", "林", "西村"], "scores": [108, 30, -79, -59], "payouts": [6200, 1600, -4650, -3150], "chips": [8, 1, -7, -2], "games": 2, "game_ranks": {"南": {"1": 2, "2": 0, "3": 0, "4": 0}, "古川": {"1": 0, "2": 2, "3": 0, "4": 0}, "林": {"1": 0, "2": 0, "3": 1, "4": 1}, "西村": {"1": 0, "2": 0, "3": 1, "4": 1}}, "game_tobi": {"南": 0, "古川": 0, "林": 1, "西村": 0}}, {"date": "2025/11/19", "players": ["南", "林", "谷垣", "関河"], "scores": [-193, 9, 144, 40], "payouts": [-11050, -450, 10400, 1100], "chips": [-14, -9, 32, -9], "games": 6, "game_ranks": {"南": {"1": 1, "2": 0, "3": 2, "4": 3}, "林": {"1": 0, "2": 4, "3": 2, "4": 0}, "谷垣": {"1": 3, "2": 0, "3": 2, "4": 1}, "関河": {"1": 2, "2": 2, "3": 0, "4": 2}}, "game_tobi": {"南": 2, "林": 0, "谷垣": 0, "関河": 1}}, {"date": "2025/11/27", "players": ["南", "熊坂", "西村", "関河"], "scores": [20, -97, 62, 15], "payouts": [900, -5650, 3500, 1250], "chips": [-1, -8, 4, 5], "games": 3, "game_ranks": {"南": {"1": 0, "2": 3, "3": 0, "4": 0}, "熊坂": {"1": 0, "2": 0, "3": 1, "4": 2}, "西村": {"1": 2, "2": 0, "3": 1, "4": 0}, "関河": {"1": 1, "2": 0, "3": 1, "4": 1}}, "game_tobi": {"南": 0, "熊坂": 0, "西村": 0, "関河": 0}}, {"date": "2025/12/04", "players": ["南", "脇川", "西村", "鎌田"], "scores": [87, -42, -50, 5], "payouts": [4950, -2200, -3400, 650], "chips": [6, -1, -9, 4], "games": 4, "game_ranks": {"南": {"1": 2, "2": 0, "3": 2, "4": 0}, "脇川": {"1": 1, "2": 0, "3": 2, "4": 1}, "西村": {"1": 0, "2": 2, "3": 0, "4": 2}, "鎌田": {"1": 1, "2": 2, "3": 0, "4": 1}}, "game_tobi": {"南": 0, "脇川": 0, "西村": 0, "鎌田": 1}}, {"date": "2025/12/05", "players": ["南", "矢田", "鎌田", "関河"], "scores": [46, -43, -55, 52], "payouts": [1800, -1950, -3150, 3300], "chips": [-5, 2, -4, 7], "games": 3, "game_ranks": {"南": {"1": 1, "2": 1, "3": 1, "4": 0}, "矢田": {"1": 1, "2": 0, "3": 0, "4": 2}, "鎌田": {"1": 0, "2": 1, "3": 1, "4": 1}, "関河": {"1": 1, "2": 1, "3": 1, "4": 0}}, "game_tobi": {"南": 0, "矢田": 0, "鎌田": 0, "関河": 0}}, {"date": "2025/12/08", "players": ["南", "林", "鎌田", "関河"], "scores": [151, 102, -89, -164], "payouts": [7150, 5600, -5650, -7100], "chips": [-4, 5, -12, 11], "games": 5, "game_ranks": {"南": {"1": 3, "2": 1, "3": 1, "4": 0}, "林": {"1": 2, "2": 2, "3": 0, "4": 1}, "鎌田": {"1": 0, "2": 1, "3": 4, "4": 0}, "関河": {"1": 0, "2": 1, "3": 0, "4": 4}}, "game_tobi": {"南": 0, "林": 0, "鎌田": 0, "関河": 1}}, {"date": "2025/12/09", "players": ["南", "林", "鎌田", "関河"], "scores": [-32, 164, -20, -112], "payouts": [-1800, 9200, -1600, -5800], "chips": [-2, 10, -6, -2], "games": 5, "game_ranks": {"南": {"1": 1, "2": 1, "3": 2, "4": 1}, "林": {"1": 3, "2": 1, "3": 1, "4": 0}, "鎌田": {"1": 1, "2": 2, "3": 1, "4": 1}, "関河": {"1": 0, "2": 1, "3": 1, "4": 3}}, "game_tobi": {"南": 0, "林": 0, "鎌田": 1, "関河": 0}}, {"date": "2025/12/13", "players": ["佐藤健", "南", "古川", "熊坂"], "scores": [169, -119, -74, 24], "payouts": [8450, -5950, -3700, 1200], "chips": [0, 0, 0, 0], "games": 3, "game_ranks": {"佐藤健": {"1": 3, "2": 0, "3": 0, "4": 0}, "南": {"1": 0, "2": 0, "3": 1, "4": 2}, "古川": {"1": 0, "2": 0, "3": 2, "4": 1}, "熊坂": {"1": 0, "2": 3, "3": 0, "4": 0}}, "game_tobi": {"佐藤健": 0, "南": 1, "古川": 0, "熊坂": 0}}, {"date": "2025/12/13", "players": ["佐藤裕", "南", "古川", "鎌田"], "scores": [6, 112, -69, -49], "payouts": [300, 5600, -3450, -2450], "chips": [0, 0, 0, 0], "games": 3, "game_ranks": {"佐藤裕": {"1": 1, "2": 0, "3": 1, "4": 1}, "南": {"1": 2, "2": 0, "3": 1, "4": 0}, "古川": {"1": 0, "2": 1, "3": 1, "4": 1}, "鎌田": {"1": 0, "2": 2, "3": 0, "4": 1}}, "game_tobi": {"佐藤裕": 0, "南": 0, "古川": 1, "鎌田": 1}}, {"date": "2025/12/13", "players": ["佐藤裕", "南", "林", "熊坂"], "scores": [-37, 25, 76, -64], "payouts": [-1850, 1250, 3800, -3200], "chips": [0, 0, 0, 0], "games": 2, "game_ranks": {"佐藤裕": {"1": 0, "2": 1, "3": 0, "4": 1}, "南": {"1": 1, "2": 0, "3": 0, "4": 1}, "林": {"1": 1, "2": 1, "3": 0, "4": 0}, "熊坂": {"1": 0, "2": 0, "3": 2, "4": 0}}, "game_tobi": {"佐藤裕": 1, "南": 1, "林": 0, "熊坂": 0}}, {"date": "2025/12/22", "players": ["南", "林", "矢田", "関河"], "scores": [121, -14, -180, 73], "payouts": [7650, -1000, -10300, 3650], "chips": [16, -3, -13, 0], "games": 4, "game_ranks": {"南": {"1": 2, "2": 1, "3": 1, "4": 0}, "林": {"1": 0, "2": 2, "3": 1, "4": 1}, "矢田": {"1": 0, "2": 1, "3": 0, "4": 3}, "関河": {"1": 2, "2": 0, "3": 2, "4": 0}}, "game_tobi": {"南": 0, "林": 0, "矢田": 3, "関河": 0}}, {"date": "2026/01/06", "players": ["南", "林", "鎌田", "関河"], "scores": [-41, -58, 177, -78], "payouts": [-950, -2800, 8650, -4900], "chips": [11, 1, -2, -10], "games": 4, "game_ranks": {"南": {"1": 0, "2": 1, "3": 3, "4": 0}, "林": {"1": 1, "2": 1, "3": 0, "4": 2}, "鎌田": {"1": 3, "2": 1, "3": 0, "4": 0}, "関河": {"1": 0, "2": 1, "3": 1, "4": 2}}, "game_tobi": {"南": 0, "林": 1, "鎌田": 0, "関河": 0}}, {"date": "2026/01/08", "players": ["南", "古川", "西村", "鎌田"], "scores": [-91, 155, -71, 7], "payouts": [-5650, 9150, -4450, 950], "chips": [-11, 14, -9, 6], "games": 4, "game_ranks": {"南": {"1": 0, "2": 1, "3": 2, "4": 1}, "古川": {"1": 3, "2": 0, "3": 1, "4": 0}, "西村": {"1": 0, "2": 2, "3": 0, "4": 2}, "鎌田": {"1": 1, "2": 1, "3": 1, "4": 1}}, "game_tobi": {"南": 1, "古川": 0, "西村": 1, "鎌田": 0}}, {"date": "2026/01/23", "players": ["佐藤健", "南", "鎌田", "関河"], "scores": [-12, 80, 0, -68], "payouts": [-400, 5300, -1100, -3800], "chips": [2, 13, -11, -4], "games": 4, "game_ranks": {"佐藤健": {"1": 1, "2": 1, "3": 1, "4": 1}, "南": {"1": 2, "2": 1, "3": 0, "4": 1}, "鎌田": {"1": 1, "2": 1, "3": 1, "4": 1}, "関河": {"1": 0, "2": 1, "3": 2, "4": 1}}, "game_tobi": {"佐藤健": 0, "南": 0, "鎌田": 0, "関河": 0}}, {"date": "2026/01/26", "players": ["南", "林", "鎌田", "関河"], "scores": [-39, -6, 34, 11], "payouts": [-1150, -1900, 1900, 1150], "chips": [8, -16, 2, 6], "games": 6, "game_ranks": {"南": {"1": 2, "2": 1, "3": 1, "4": 2}, "林": {"1": 2, "2": 0, "3": 3, "4": 1}, "鎌田": {"1": 2, "2": 1, "3": 1, "4": 2}, "関河": {"1": 0, "2": 4, "3": 1, "4": 1}}, "game_tobi": {"南": 2, "林": 0, "鎌田": 1, "関河": 0}}, {"date": "2026/01/28", "players": ["南", "林", "谷垣", "関河"], "scores": [-69, 177, -135, 27], "payouts": [-4750, 11550, -7750, 950], "chips": [-13, 27, -10, -4], "games": 5, "game_ranks": {"南": {"1": 1, "2": 1, "3": 1, "4": 2}, "林": {"1": 3, "2": 0, "3": 1, "4": 1}, "谷垣": {"1": 0, "2": 2, "3": 1, "4": 2}, "関河": {"1": 1, "2": 2, "3": 2, "4": 0}}, "game_tobi": {"南": 1, "林": 0, "谷垣": 2, "関河": 0}}, {"date": "2026/01/29", "players": ["南", "林", "矢田", "関河"], "scores": [-98, -100, 51, 147], "payouts": [-6800, -6400, 6550, 6650], "chips": [-19, -14, 40, -7], "games": 5, "game_ranks": {"南": {"1": 0, "2": 2, "3": 2, "4": 1}, "林": {"1": 0, "2": 1, "3": 3, "4": 1}, "矢田": {"1": 2, "2": 1, "3": 0, "4": 2}, "関河": {"1": 3, "2": 1, "3": 0, "4": 1}}, "game_tobi": {"南": 1, "林": 1, "矢田": 0, "関河": 1}}, {"date": "2026/02/03", "players": ["杉野", "林", "熊坂", "関河"], "scores": [19, 62, -141, 60], "payouts": [150, 4200, -8150, 3800], "chips": [-8, 11, -11, 8], "games": 4, "game_ranks": {"杉野": {"1": 1, "2": 2, "3": 0, "4": 1}, "林": {"1": 1, "2": 1, "3": 2, "4": 0}, "熊坂": {"1": 0, "2": 0, "3": 2, "4": 2}, "関河": {"1": 2, "2": 1, "3": 0, "4": 1}}, "game_tobi": {"杉野": 1, "林": 0, "熊坂": 1, "関河": 1}}, {"date": "2026/02/04", "players": ["南", "林", "矢田", "関河"], "scores": [216, -115, -46, -55], "payouts": [11900, -6450, -2900, -2550], "chips": [11, -7, -6, 2], "games": 4, "game_ranks": {"南": {"1": 4, "2": 0, "3": 0, "4": 0}, "林": {"1": 0, "2": 2, "3": 0, "4": 2}, "矢田": {"1": 0, "2": 1, "3": 3, "4": 0}, "関河": {"1": 0, "2": 1, "3": 1, "4": 2}}, "game_tobi": {"南": 0, "林": 2, "矢田": 0, "関河": 1}}, {"date": "2026/02/18", "players": ["南", "杉野", "鎌田", "関河"], "scores": [-85, -101, 85, 101], "payouts": [-4450, -5150, 3850, 5750], "chips": [165, -1, -4, 7], "games": 5, "game_ranks": {"南": {"1": 1, "2": 1, "3": 1, "4": 2}, "杉野": {"1": 0, "2": 1, "3": 3, "4": 1}, "鎌田": {"1": 3, "2": 0, "3": 1, "4": 1}, "関河": {"1": 1, "2": 3, "3": 0, "4": 1}}, "game_tobi": {"南": 2, "杉野": 0, "鎌田": 1, "関河": 0}}, {"date": "2026/02/24", "players": ["南", "矢田", "谷垣", "関河"], "scores": [-76, 42, 39, -5], "payouts": [-4900, 2100, 1750, 1050], "chips": [-11, 0, -2, 13], "games": 3, "game_ranks": {"南": {"1": 0, "2": 0, "3": 2, "4": 1}, "矢田": {"1": 2, "2": 0, "3": 0, "4": 1}, "谷垣": {"1": 0, "2": 3, "3": 0, "4": 0}, "関河": {"1": 1, "2": 0, "3": 1, "4": 1}}, "game_tobi": {"南": 0, "矢田": 1, "谷垣": 0, "関河": 0}}, {"date": "2026/02/25", "players": ["南", "林", "矢田", "関河"], "scores": [48, 68, -110, -6], "payouts": [2500, 2800, -6200, 900], "chips": [1, -6, -7, 12], "games": 4, "game_ranks": {"南": {"1": 1, "2": 2, "3": 0, "4": 1}, "林": {"1": 2, "2": 0, "3": 2, "4": 0}, "矢田": {"1": 0, "2": 1, "3": 1, "4": 2}, "関河": {"1": 1, "2": 1, "3": 1, "4": 1}}, "game_tobi": {"南": 0, "林": 0, "矢田": 1, "関河": 1}}, {"date": "2026/02/27", "players": ["南", "古川", "林", "矢田"], "scores": [-55, 91, 37, -73], "payouts": [-2150, 4750, 1650, -4250], "chips": [6, 2, -2, -6], "games": 2, "game_ranks": {"南": {"1": 0, "2": 1, "3": 0, "4": 1}, "古川": {"1": 1, "2": 1, "3": 0, "4": 0}, "林": {"1": 1, "2": 0, "3": 1, "4": 0}, "矢田": {"1": 0, "2": 0, "3": 1, "4": 1}}, "game_tobi": {"南": 1, "古川": 0, "林": 0, "矢田": 1}}, {"date": "2026/03/03", "players": ["南", "林", "西村", "関河"], "scores": [6, -17, -18, 29], "payouts": [700, -1650, 300, 650], "chips": [4, -8, 12, -8], "games": 5, "game_ranks": {"南": {"1": 2, "2": 1, "3": 1, "4": 1}, "林": {"1": 1, "2": 2, "3": 1, "4": 1}, "西村": {"1": 1, "2": 0, "3": 2, "4": 2}, "関河": {"1": 1, "2": 2, "3": 1, "4": 1}}, "game_tobi": {"南": 0, "林": 1, "西村": 1, "関河": 0}}, {"date": "2026/03/04", "players": ["南", "林", "近藤", "関河"], "scores": [107, -82, 13, -38], "payouts": [5150, -6000, 2650, -1800], "chips": [-2, -19, 20, 1], "games": 5, "game_ranks": {"南": {"1": 2, "2": 2, "3": 0, "4": 1}, "林": {"1": 0, "2": 2, "3": 2, "4": 1}, "近藤": {"1": 2, "2": 0, "3": 1, "4": 2}, "関河": {"1": 1, "2": 1, "3": 2, "4": 1}}, "game_tobi": {"南": 1, "林": 0, "近藤": 0, "関河": 1}}, {"date": "2026/03/09", "players": ["南", "横山", "西村", "関河"], "scores": [162, -204, 138, -96], "payouts": [9500, -12800, 9800, -6500], "chips": [14, -26, 29, -17], "games": 5, "game_ranks": {"南": {"1": 2, "2": 2, "3": 1, "4": 0}, "横山": {"1": 0, "2": 0, "3": 2, "4": 3}, "西村": {"1": 3, "2": 0, "3": 2, "4": 0}, "関河": {"1": 0, "2": 3, "3": 0, "4": 2}}, "game_tobi": {"南": 0, "横山": 1, "西村": 0, "関河": 2}}, {"date": "2026/03/10", "players": ["南", "脇川", "鎌田", "関河"], "scores": [-21, 65, -11, -33], "payouts": [-750, 3450, -1450, -1250], "chips": [3, 2, -9, 4], "games": 4, "game_ranks": {"南": {"1": 1, "2": 0, "3": 2, "4": 1}, "脇川": {"1": 2, "2": 1, "3": 0, "4": 1}, "鎌田": {"1": 0, "2": 3, "3": 0, "4": 1}, "関河": {"1": 1, "2": 0, "3": 2, "4": 1}}, "game_tobi": {"南": 0, "脇川": 0, "鎌田": 0, "関河": 0}}, {"date": "2026/03/17", "players": ["佐藤裕", "南", "鎌田", "関河"], "scores": [-51, 86, -83, 48], "payouts": [-3650, 6500, -5450, 2600], "chips": [-11, 22, -13, 2], "games": 5, "game_ranks": {"佐藤裕": {"1": 1, "2": 1, "3": 2, "4": 1}, "南": {"1": 3, "2": 0, "3": 0, "4": 2}, "鎌田": {"1": 1, "2": 0, "3": 2, "4": 2}, "関河": {"1": 0, "2": 4, "3": 1, "4": 0}}, "game_tobi": {"佐藤裕": 1, "南": 0, "鎌田": 1, "関河": 0}}, {"date": "2026/03/18", "players": ["南", "林", "脇川", "関河"], "scores": [4, 55, -72, 13], "payouts": [200, 2650, -3800, 950], "chips": [0, -1, -2, 3], "games": 6, "game_ranks": {"南": {"1": 1, "2": 3, "3": 0, "4": 2}, "林": {"1": 3, "2": 0, "3": 1, "4": 2}, "脇川": {"1": 1, "2": 1, "3": 2, "4": 2}, "関河": {"1": 1, "2": 2, "3": 3, "4": 0}}, "game_tobi": {"南": 1, "林": 2, "脇川": 1, "関河": 0}}, {"date": "2026/03/30", "players": ["南", "矢田", "西村", "関河"], "scores": [-30, 27, 83, -80], "payouts": [-2500, 1450, 4950, -3900], "chips": [-10, 1, 8, 1], "games": 6, "game_ranks": {"南": {"1": 2, "2": 1, "3": 2, "4": 1}, "矢田": {"1": 2, "2": 2, "3": 0, "4": 2}, "西村": {"1": 2, "2": 1, "3": 3, "4": 0}, "関河": {"1": 0, "2": 2, "3": 1, "4": 3}}, "game_tobi": {"南": 1, "矢田": 1, "西村": 0, "関河": 1}}, {"date": "2026/03/31", "players": ["南", "西村", "鎌田", "関河"], "scores": [-32, 172, -151, 11], "payouts": [-3100, 11200, -8150, 50], "chips": [-15, 26, -6, -5], "games": 6, "game_ranks": {"南": {"1": 1, "2": 3, "3": 0, "4": 2}, "西村": {"1": 3, "2": 2, "3": 0, "4": 1}, "鎌田": {"1": 0, "2": 1, "3": 3, "4": 2}, "関河": {"1": 2, "2": 0, "3": 3, "4": 1}}, "game_tobi": {"南": 1, "西村": 0, "鎌田": 1, "関河": 0}}, {"date": "2026/04/07", "players": ["南", "熊坂", "近藤", "関河"], "scores": [-78, -74, 132, 20], "payouts": [-4600, -4700, 8300, 1000], "chips": [-7, -10, 17, 0], "games": 5, "game_ranks": {"南": {"1": 0, "2": 3, "3": 0, "4": 2}, "熊坂": {"1": 1, "2": 1, "3": 1, "4": 2}, "近藤": {"1": 2, "2": 1, "3": 2, "4": 0}, "関河": {"1": 2, "2": 0, "3": 2, "4": 1}}, "game_tobi": {"南": 1, "熊坂": 2, "近藤": 0, "関河": 1}}, {"date": "2026/04/08", "players": ["南", "古川", "西村", "関河"], "scores": [42, -65, 14, 9], "payouts": [2000, -3850, 1500, 350], "chips": [-1, -6, 8, -1], "games": 4, "game_ranks": {"南": {"1": 1, "2": 2, "3": 1, "4": 0}, "古川": {"1": 1, "2": 0, "3": 0, "4": 3}, "西村": {"1": 1, "2": 1, "3": 1, "4": 1}, "関河": {"1": 1, "2": 1, "3": 2, "4": 0}}, "game_tobi": {"南": 0, "古川": 0, "西村": 0, "関河": 0}}, {"date": "2026/04/13", "players": ["脇川", "近藤", "鎌田", "関河"], "scores": [70, -77, -65, 72], "payouts": [3500, -3850, -3250, 3600], "chips": [0, 0, 0, 0], "games": 2, "game_ranks": {"脇川": {"1": 1, "2": 1, "3": 0, "4": 0}, "近藤": {"1": 0, "2": 0, "3": 1, "4": 1}, "鎌田": {"1": 0, "2": 0, "3": 1, "4": 1}, "関河": {"1": 1, "2": 1, "3": 0, "4": 0}}, "game_tobi": {"脇川": 0, "近藤": 1, "鎌田": 0, "関河": 0}}, {"date": "2026/04/13", "players": ["脇川", "近藤", "鎌田", "関河"], "scores": [0, -153, -7, 160], "payouts": [-800, -8250, -350, 9400], "chips": [-8, -6, 0, 14], "games": 5, "game_ranks": {"脇川": {"1": 1, "2": 2, "3": 1, "4": 1}, "近藤": {"1": 0, "2": 1, "3": 2, "4": 2}, "鎌田": {"1": 2, "2": 0, "3": 1, "4": 2}, "関河": {"1": 2, "2": 2, "3": 1, "4": 0}}, "game_tobi": {"脇川": 1, "近藤": 2, "鎌田": 1, "関河": 0}}, {"date": "2026/04/19", "players": ["杉野", "林", "藤田", "関河"], "scores": [-84, 117, -154, 121], "payouts": [-4900, 6350, -7900, 6450], "chips": [-7, 5, -2, 4], "games": 6, "game_ranks": {"杉野": {"1": 0, "2": 3, "3": 1, "4": 2}, "林": {"1": 3, "2": 2, "3": 0, "4": 1}, "藤田": {"1": 0, "2": 1, "3": 2, "4": 3}, "関河": {"1": 3, "2": 0, "3": 3, "4": 0}}, "game_tobi": {"杉野": 1, "林": 1, "藤田": 1, "関河": 0}}, {"date": "2026/04/29", "players": ["古川", "西村", "鎌田", "関河"], "scores": [66, 98, 16, -180], "payouts": [3800, 3800, 3100, -10700], "chips": [5, -11, 23, -17], "games": 8, "game_ranks": {"古川": {"1": 2, "2": 2, "3": 3, "4": 1}, "西村": {"1": 3, "2": 2, "3": 2, "4": 1}, "鎌田": {"1": 2, "2": 3, "3": 1, "4": 2}, "関河": {"1": 1, "2": 1, "3": 2, "4": 4}}, "game_tobi": {"古川": 0, "西村": 0, "鎌田": 1, "関河": 2}}, {"date": "2026/04/30", "players": ["南", "矢田", "西村", "鎌田"], "scores": [-55, -12, -62, 129], "payouts": [-2550, -400, -3000, 5950], "chips": [2, 2, 1, -5], "games": 5, "game_ranks": {"南": {"1": 2, "2": 1, "3": 0, "4": 2}, "矢田": {"1": 0, "2": 3, "3": 2, "4": 0}, "西村": {"1": 1, "2": 0, "3": 2, "4": 2}, "鎌田": {"1": 2, "2": 1, "3": 1, "4": 1}}, "game_tobi": {"南": 1, "矢田": 0, "西村": 1, "鎌田": 0}}, {"date": "2026/05/07", "players": ["南", "林", "脇川", "関河"], "scores": [-52, 128, -16, -60], "payouts": [-2000, 7700, -1700, -4000], "chips": [6, 13, -9, -10], "games": 6, "game_ranks": {"南": {"1": 1, "2": 3, "3": 0, "4": 2}, "林": {"1": 3, "2": 0, "3": 2, "4": 1}, "脇川": {"1": 1, "2": 2, "3": 1, "4": 2}, "関河": {"1": 1, "2": 1, "3": 3, "4": 1}}, "game_tobi": {"南": 1, "林": 0, "脇川": 1, "関河": 1}}, {"date": "2026/05/08", "players": ["南", "古川", "西村", "関河"], "scores": [246, 18, -229, -35], "payouts": [15500, -300, -13750, -1450], "chips": [32, -12, -23, 3], "games": 6, "game_ranks": {"南": {"1": 4, "2": 1, "3": 0, "4": 1}, "古川": {"1": 2, "2": 1, "3": 2, "4": 1}, "西村": {"1": 0, "2": 1, "3": 1, "4": 4}, "関河": {"1": 0, "2": 3, "3": 3, "4": 0}}, "game_tobi": {"南": 0, "古川": 0, "西村": 2, "関河": 0}}, {"date": "2026/05/18", "players": ["南", "矢田", "谷垣", "関河"], "scores": [-86, 33, -52, 105], "payouts": [-4200, 950, -3000, 6250], "chips": [1, -7, -4, 10], "games": 3, "game_ranks": {"南": {"1": 0, "2": 0, "3": 2, "4": 1}, "矢田": {"1": 1, "2": 1, "3": 1, "4": 0}, "谷垣": {"1": 0, "2": 2, "3": 0, "4": 1}, "関河": {"1": 2, "2": 0, "3": 0, "4": 1}}, "game_tobi": {"南": 0, "矢田": 0, "谷垣": 1, "関河": 0}}, {"date": "2026/05/25", "players": ["南", "林", "脇川", "関河"], "scores": [73, -131, 1, 57], "payouts": [4050, -7750, 1650, 2050], "chips": [4, -12, 16, -8], "games": 4, "game_ranks": {"南": {"1": 2, "2": 0, "3": 2, "4": 0}, "林": {"1": 0, "2": 1, "3": 0, "4": 3}, "脇川": {"1": 0, "2": 3, "3": 0, "4": 1}, "関河": {"1": 2, "2": 0, "3": 2, "4": 0}}, "game_tobi": {"南": 0, "林": 0, "脇川": 0, "関河": 0}}, {"date": "2026/05/29", "players": ["南", "林", "脇川", "関河"], "scores": [-146, 18, 132, -4], "payouts": [-7100, 1200, 6700, -800], "chips": [2, 3, 1, -6], "games": 6, "game_ranks": {"南": {"1": 1, "2": 0, "3": 2, "4": 3}, "林": {"1": 2, "2": 1, "3": 1, "4": 2}, "脇川": {"1": 1, "2": 5, "3": 0, "4": 0}, "関河": {"1": 2, "2": 0, "3": 3, "4": 1}}, "game_tobi": {"南": 2, "林": 0, "脇川": 0, "関河": 1}}, {"date": "2026/07/31", "players": ["南", "古川", "林", "西村"], "scores": [-85, -72, 46, 111], "payouts": [-3150, -3900, 1700, 5350], "chips": [11, -3, -6, -2], "games": 6, "game_ranks": {"南": {"1": 1, "2": 1, "3": 1, "4": 3}, "古川": {"1": 1, "2": 2, "3": 1, "4": 2}, "林": {"1": 2, "2": 1, "3": 2, "4": 1}, "西村": {"1": 2, "2": 2, "3": 2, "4": 0}}, "game_tobi": {"南": 1, "古川": 2, "林": 1, "西村": 0}}, {"date": "2026/09/03", "players": ["南", "林", "藤原", "西村"], "scores": [92, 81, -117, -56], "payouts": [4000, 3850, -6350, -1500], "chips": [-6, -2, -5, 13], "games": 4, "game_ranks": {"南": {"1": 2, "2": 1, "3": 1, "4": 0}, "林": {"1": 2, "2": 0, "3": 2, "4": 0}, "藤原": {"1": 0, "2": 1, "3": 1, "4": 2}, "西村": {"1": 0, "2": 2, "3": 0, "4": 2}}, "game_tobi": {"南": 0, "林": 0, "藤原": 1, "西村": 1}}, {"date": "2026/09/16", "players": ["南", "古川", "藤原", "西村"], "scores": [49, 89, -122, -16], "payouts": [3450, 6050, -7400, -2100], "chips": [10, 16, -13, -13], "games": 3, "game_ranks": {"南": {"1": 1, "2": 1, "3": 1, "4": 0}, "古川": {"1": 2, "2": 0, "3": 0, "4": 1}, "藤原": {"1": 0, "2": 0, "3": 1, "4": 2}, "西村": {"1": 0, "2": 2, "3": 1, "4": 0}}, "game_tobi": {"南": 0, "古川": 0, "藤原": 1, "西村": 0}}, {"date": "2026/09/23", "players": ["古川", "熊坂", "藤原", "鎌田"], "scores": [-123, 58, 99, -34], "payouts": [-7150, 2500, 4950, -300], "chips": [-10, -4, 0, 14], "games": 7, "game_ranks": {"古川": {"1": 0, "2": 3, "3": 1, "4": 3}, "熊坂": {"1": 3, "2": 1, "3": 1, "4": 2}, "藤原": {"1": 3, "2": 1, "3": 2, "4": 1}, "鎌田": {"1": 1, "2": 2, "3": 3, "4": 1}}, "game_tobi": {"古川": 2, "熊坂": 1, "藤原": 1, "鎌田": 0}}, {"date": "2026/10/07", "players": ["南", "林", "矢田", "関河"], "scores": [69, 56, 14, -139], "payouts": [4850, 2600, 300, -7750], "chips": [14, -2, -4, -8], "games": 4, "game_ranks": {"南": {"1": 1, "2": 2, "3": 1, "4": 0}, "林": {"1": 2, "2": 1, "3": 0, "4": 1}, "矢田": {"1": 1, "2": 1, "3": 1, "4": 1}, "関河": {"1": 0, "2": 0, "3": 2, "4": 2}}, "game_tobi": {"南": 0, "林": 0, "矢田": 0, "関河": 0}}, {"date": "2026/10/12", "players": ["古川", "熊坂", "藤原", "西村"], "scores": [12, 26, -99, 61], "payouts": [600, 700, -4350, 3050], "chips": [0, -6, 6, 0], "games": 6, "game_ranks": {"古川": {"1": 2, "2": 0, "3": 1, "4": 3}, "熊坂": {"1": 2, "2": 1, "3": 2, "4": 1}, "藤原": {"1": 0, "2": 3, "3": 2, "4": 1}, "西村": {"1": 2, "2": 2, "3": 1, "4": 1}}, "game_tobi": {"古川": 0, "熊坂": 1, "藤原": 1, "西村": 0}}];
+const DATA = [{"date":"2025/03/13","players":["南","林","藤田","関河"],"games":[{"pt":[42000,29000,44000,-15000],"sc":[32.0,-11.0,54.0,-75.0],"pay":[1600,-550,2700,-3750]},{"pt":[10000,68000,-17000,39000],"sc":[-30.0,78.0,-67.0,19.0],"pay":[-1500,3900,-3350,950]},{"pt":[-11000,17000,69000,25000],"sc":[-61.0,-23.0,79.0,5.0],"pay":[-3050,-1150,3950,250]},{"pt":[-11000,25000,24000,62000],"sc":[-61.0,5.0,-16.0,72.0],"pay":[-3050,250,-800,3600]}],"chips":[0,0,0,0]},{"date":"2025/03/15","players":["南","林","藤田","関河"],"games":[{"pt":[-43500,121500,4000,18000],"sc":[-93.0,131.0,-36.0,-2.0],"pay":[-5850,7150,-1100,-200]},{"pt":[37000,-11000,19000,55000],"sc":[17.0,-61.0,-21.0,65.0],"pay":[850,-3050,-1050,3250]},{"pt":[19000,29000,9000,43000],"sc":[-21.0,9.0,-41.0,53.0],"pay":[-1050,450,-2050,2650]}],"chips":[-12,6,7,-1]},{"date":"2025/03/27","players":["南","林","藤田","関河"],"games":[{"pt":[42000,57000,18000,-17000],"sc":[22.0,67.0,-22.0,-67.0],"pay":[1100,3550,-1800,-2850]},{"pt":[-11000,34000,24000,53000],"sc":[-61.0,14.0,-16.0,63.0],"pay":[-3050,700,-800,3150]},{"pt":[21000,41000,25000,13000],"sc":[-19.0,51.0,5.0,-37.0],"pay":[-950,2550,250,-1850]},{"pt":[42000,18000,-10000,50000],"sc":[22.0,-22.0,-60.0,60.0],"pay":[1100,-1100,-3000,3000]}],"chips":[0,2,-7,5]},{"date":"2025/04/24","players":["南","林","藤田","関河"],"games":[{"pt":[20700,1800,24900,52600],"sc":[-19.0,-48.0,5.0,62.0],"pay":[-1750,-3000,450,4300]},{"pt":[5900,45200,19800,29100],"sc":[-44.0,55.0,-20.0,9.0],"pay":[-2200,2750,-1000,450]},{"pt":[15800,39700,55900,-11400],"sc":[-24.0,20.0,65.0,-61.0],"pay":[-1200,1000,3250,-3050]},{"pt":[47600,25200,10600,16600],"sc":[57.0,5.0,-39.0,-23.0],"pay":[2850,250,-1950,-1150]}],"chips":[-8,-6,2,12]},{"date":"2025/04/25","players":["南","古川","西村","鎌田"],"games":[{"pt":[23400,27900,15200,33500],"sc":[-17.0,8.0,-35.0,44.0],"pay":[-2650,2200,-1050,1500]},{"pt":[10100,37200,38900,13800],"sc":[-40.0,17.0,49.0,-26.0],"pay":[-2000,850,2450,-1300]},{"pt":[-2700,33700,37600,31400],"sc":[-53.0,14.0,48.0,-9.0],"pay":[-2650,700,2400,-450]},{"pt":[-700,56100,26500,18100],"sc":[-51.0,67.0,6.0,-22.0],"pay":[-2550,3350,300,-1100]}],"chips":[-18,18,7,-7]},{"date":"2025/05/13","players":["南","林","藤田","関河"],"games":[{"pt":[13200,54300,-1100,33600],"sc":[-27.0,74.0,-61.0,14.0],"pay":[-1600,4250,-3600,950]},{"pt":[24200,31400,34200,10200],"sc":[-16.0,11.0,45.0,-40.0],"pay":[-800,550,2250,-2000]},{"pt":[19400,26300,16300,38000],"sc":[-21.0,6.0,-34.0,49.0],"pay":[-1050,300,-1700,2450]},{"pt":[13000,33800,22700,30500],"sc":[-37.0,44.0,-17.0,10.0],"pay":[-1850,2200,-850,500]}],"chips":[-5,11,-11,5]},{"date":"2025/06/04","players":["南","林","藤田","関河"],"games":[{"pt":[31700,42700,-3600,29200],"sc":[22.0,53.0,-64.0,-11.0],"pay":[500,2250,-3400,650]},{"pt":[19500,-4500,27300,57700],"sc":[-11.0,-64.0,7.0,68.0],"pay":[-550,-3200,350,3400]},{"pt":[18100,24300,23700,33900],"sc":[-32.0,4.0,-16.0,44.0],"pay":[-1600,200,-800,2200]},{"pt":[24900,52400,-400,23100],"sc":[5.0,72.0,-60.0,-17.0],"pay":[250,3600,-3000,-850]},{"pt":[27400,47900,-2200,26900],"sc":[17.0,58.0,-62.0,-13.0],"pay":[850,2900,-3100,-650]},{"pt":[14300,900,27900,56900],"sc":[-26.0,-49.0,8.0,67.0],"pay":[-1300,-2450,400,3350]},{"pt":[8300,26700,45700,19300],"sc":[-42.0,7.0,56.0,-21.0],"pay":[-2100,350,2800,-1050]},{"pt":[27100,23400,51300,-1800],"sc":[7.0,-17.0,72.0,-62.0],"pay":[350,-850,3600,-3100]}],"chips":[-6,-4,-2,12]},{"date":"2025/06/12","players":["南","古川","林","関河"],"games":[{"pt":[32100,23000,25100,19800],"sc":[42.0,-17.0,5.0,-30.0],"pay":[3300,-1450,-350,-1500]},{"pt":[4100,58200,21900,15800],"sc":[-46.0,68.0,2.0,-24.0],"pay":[-2300,3400,100,-1200]},{"pt":[39300,25800,29300,5600],"sc":[49.0,-14.0,9.0,-44.0],"pay":[2450,-700,450,-2200]},{"pt":[34900,7400,46600,11100],"sc":[15.0,-43.0,57.0,-29.0],"pay":[750,-2150,2850,-1450]},{"pt":[33900,14900,14400,36800],"sc":[14.0,-25.0,-36.0,47.0],"pay":[700,-1250,-1800,2350]}],"chips":[12,-6,-6,0]},{"date":"2025/07/04","players":["南","古川","熊坂","矢田"],"games":[{"pt":[45100,-2800,22900,34800],"sc":[65.0,-63.0,-17.0,15.0],"pay":[3350,-4050,-50,750]},{"pt":[49000,-1500,15000,37500],"sc":[69.0,-61.0,-25.0,17.0],"pay":[3450,-3050,-1250,850]},{"pt":[19200,27900,18400,34500],"sc":[-21.0,8.0,-32.0,45.0],"pay":[-1050,400,-1600,2250]},{"pt":[52300,17400,4600,25700],"sc":[62.0,-23.0,-45.0,6.0],"pay":[3100,-1150,-2250,300]}],"chips":[1,-9,8,0]},{"date":"2025/07/08","players":["南","林","矢田","関河"],"games":[{"pt":[38800,21400,6500,33300],"sc":[50.0,-19.0,-44.0,13.0],"pay":[0,-1450,-3100,4550]},{"pt":[18500,31400,27100,23000],"sc":[-32.0,42.0,7.0,-17.0],"pay":[-1600,2100,350,-850]},{"pt":[41100,13000,3300,42600],"sc":[21.0,-27.0,-47.0,53.0],"pay":[1050,-1350,-2350,2650]},{"pt":[14100,61600,26200,-1900],"sc":[-26.0,82.0,6.0,-62.0],"pay":[-1300,4100,300,-3100]},{"pt":[16600,45900,-2100,39600],"sc":[-23.0,55.0,-62.0,30.0],"pay":[-1150,2750,-3100,1500]},{"pt":[15000,17200,36100,31700],"sc":[-35.0,-23.0,46.0,12.0],"pay":[-1750,-1150,2300,600]}],"chips":[-25,-5,-9,39]},{"date":"2025/08/12","players":["南","古川","林","関河"],"games":[{"pt":[1600,42800,48500,7100],"sc":[-48.0,23.0,58.0,-33.0],"pay":[-4000,2050,2500,-550]},{"pt":[-5300,81900,6700,16700],"sc":[-65.0,101.0,-33.0,-3.0],"pay":[-3250,5050,-1650,-150]},{"pt":[41000,-17300,17000,59300],"sc":[21.0,-77.0,-23.0,79.0],"pay":[1050,-3850,-1150,3950]},{"pt":[37800,50200,16500,-4500],"sc":[28.0,60.0,-24.0,-64.0],"pay":[1400,3000,-1200,-3200]},{"pt":[700,37800,45700,15800],"sc":[-49.0,18.0,55.0,-24.0],"pay":[-2450,900,2750,-1200]},{"pt":[20100,27100,31700,21100],"sc":[-30.0,7.0,42.0,-19.0],"pay":[-1500,350,2100,-950]}],"chips":[-16,9,-4,11]},{"date":"2025/08/22","players":["南","林","藤田","関河"],"games":[{"pt":[32800,21700,26500,19000],"sc":[43.0,-18.0,6.0,-31.0],"pay":[4050,-1600,400,-2850]},{"pt":[54200,11200,19100,15500],"sc":[65.0,-39.0,-1.0,-25.0],"pay":[3250,-1950,-50,-1250]},{"pt":[42500,4700,32000,20800],"sc":[52.0,-45.0,12.0,-19.0],"pay":[2600,-2250,600,-950]},{"pt":[71700,15200,-3600,16700],"sc":[92.0,-25.0,-64.0,-3.0],"pay":[4600,-1250,-3200,-150]},{"pt":[27700,51200,14300,6800],"sc":[8.0,61.0,-26.0,-43.0],"pay":[400,3050,-1300,-2150]},{"pt":[-4000,67300,22800,13900],"sc":[-54.0,77.0,3.0,-26.0],"pay":[-2700,3850,150,-1300]},{"pt":[21100,43300,34500,1100],"sc":[-19.0,54.0,14.0,-49.0],"pay":[-950,2700,700,-2450]}],"chips":[19,-7,1,-13]},{"date":"2025/08/26","players":["南","林","熊坂","関河"],"games":[{"pt":[31700,6100,20000,42200],"sc":[12.0,-44.0,-20.0,52.0],"pay":[1800,-2400,-1700,2300]},{"pt":[11400,19700,33500,35400],"sc":[-39.0,-20.0,13.0,46.0],"pay":[-1950,-1000,650,2300]},{"pt":[41700,19800,42800,-4300],"sc":[22.0,-20.0,62.0,-64.0],"pay":[1100,-1000,3100,-3200]},{"pt":[27000,38200,-4800,39600],"sc":[-13.0,28.0,-65.0,50.0],"pay":[-650,1400,-3250,2500]},{"pt":[29500,45200,25700,-400],"sc":[9.0,65.0,-14.0,-60.0],"pay":[450,3250,-700,-3000]},{"pt":[63000,29300,9200,-1500],"sc":[73.0,19.0,-31.0,-61.0],"pay":[3650,950,-1550,-3050]}],"chips":[12,-2,-7,-3]},{"date":"2025/09/04","players":["南","林","矢田","関河"],"games":[{"pt":[14700,13900,39900,31500],"sc":[-25.0,-36.0,50.0,11.0],"pay":[-2050,-800,2500,350]},{"pt":[26200,27200,2700,43900],"sc":[-14.0,7.0,-47.0,54.0],"pay":[-700,350,-2350,2700]},{"pt":[15300,52000,26600,6100],"sc":[-25.0,62.0,7.0,-44.0],"pay":[-1250,3100,350,-2200]},{"pt":[-700,4000,51200,45500],"sc":[-61.0,-36.0,62.0,35.0],"pay":[-3050,-1800,3100,1750]},{"pt":[26300,53500,22800,-2600],"sc":[16.0,64.0,-17.0,-63.0],"pay":[800,3200,-850,-3150]}],"chips":[-8,10,0,-2]},{"date":"2025/09/11","players":["南","林","熊坂","西村"],"games":[{"pt":[37200,18200,8400,36200],"sc":[48.0,-22.0,-42.0,16.0],"pay":[1700,-1000,-3200,2500]},{"pt":[25200,24000,15200,35600],"sc":[5.0,-16.0,-35.0,46.0],"pay":[250,-800,-1750,2300]},{"pt":[22800,24700,-4600,57100],"sc":[-7.0,5.0,-65.0,67.0],"pay":[-350,250,-3250,3350]}],"chips":[-7,1,-11,17]},{"date":"2025/09/17","players":["南","林","矢田","関河"],"games":[{"pt":[20000,43400,37500,-900],"sc":[-20.0,54.0,27.0,-61.0],"pay":[-100,3100,550,-3550]},{"pt":[32400,6500,21100,40000],"sc":[12.0,-44.0,-19.0,51.0],"pay":[600,-2200,-950,2550]},{"pt":[13200,38800,24500,23500],"sc":[-37.0,50.0,4.0,-17.0],"pay":[-1850,2500,200,-850]},{"pt":[30100,19700,7800,42400],"sc":[10.0,-20.0,-42.0,52.0],"pay":[500,-1000,-2100,2600]}],"chips":[9,4,-8,-5]},{"date":"2025/09/22","players":["南","林","西村","関河"],"games":[{"pt":[24300,6600,33600,35500],"sc":[-16.0,-43.0,14.0,45.0],"pay":[-2600,-2050,-100,4750]},{"pt":[24100,7000,36300,32600],"sc":[-16.0,-43.0,46.0,13.0],"pay":[-800,-2150,2300,650]},{"pt":[17700,46500,30000,5800],"sc":[-22.0,56.0,10.0,-44.0],"pay":[-1100,2800,500,-2200]},{"pt":[21800,7200,76200,-5200],"sc":[12.0,-33.0,86.0,-65.0],"pay":[600,-1650,4300,-3250]},{"pt":[13600,40000,15800,30600],"sc":[-36.0,49.0,-24.0,11.0],"pay":[-1800,2450,-1200,550]}],"chips":[-18,1,-8,25]},{"date":"2025/09/26","players":["南","熊坂","矢田","西村"],"games":[{"pt":[31400,7900,5000,55700],"sc":[11.0,-32.0,-45.0,66.0],"pay":[-50,-1400,-2050,3500]},{"pt":[15700,33700,29900,20700],"sc":[-34.0,43.0,10.0,-19.0],"pay":[-1700,2150,500,-950]},{"pt":[-300,17400,45900,37000],"sc":[-60.0,-23.0,66.0,17.0],"pay":[-3000,-1150,3300,850]},{"pt":[29200,18300,31900,20600],"sc":[9.0,-32.0,42.0,-19.0],"pay":[450,-1600,2100,-950]},{"pt":[18000,10400,43300,28300],"sc":[-22.0,-40.0,54.0,8.0],"pay":[-1100,-2000,2700,400]}],"chips":[-6,2,2,2]},{"date":"2025/10/08","players":["南","林","谷垣","関河"],"games":[{"pt":[23500,-2800,72600,6700],"sc":[3.0,-63.0,93.0,-33.0],"pay":[-1150,-4150,6050,-750]},{"pt":[21200,28900,50000,-100],"sc":[-19.0,9.0,70.0,-60.0],"pay":[-950,450,3500,-3000]},{"pt":[11500,30100,13300,45100],"sc":[-39.0,10.0,-27.0,56.0],"pay":[-1950,500,-1350,2800]},{"pt":[40100,16600,33400,9900],"sc":[50.0,-23.0,13.0,-40.0],"pay":[2500,-1150,650,-2000]},{"pt":[9900,19800,46300,24000],"sc":[-40.0,-20.0,56.0,4.0],"pay":[-2000,-1000,2800,200]}],"chips":[-13,-10,14,9]},{"date":"2025/10/09","players":["南","林","西村","関河"],"games":[{"pt":[25300,40000,35000,-300],"sc":[-5.0,50.0,15.0,-60.0],"pay":[-1250,2500,3750,-5000]},{"pt":[23000,26600,40100,10300],"sc":[-17.0,7.0,50.0,-40.0],"pay":[-850,350,2500,-2000]},{"pt":[20900,13000,60900,5200],"sc":[1.0,-27.0,71.0,-45.0],"pay":[50,-1350,3550,-2250]},{"pt":[46900,40100,10800,2200],"sc":[57.0,20.0,-29.0,-48.0],"pay":[2850,1000,-1450,-2400]},{"pt":[5300,67300,31800,-4400],"sc":[-35.0,87.0,12.0,-64.0],"pay":[-1750,4350,600,-3200]}],"chips":[-10,0,30,-20]},{"date":"2025/10/10","players":["南","古川","林","矢田"],"games":[{"pt":[53200,-1700,18700,29800],"sc":[73.0,-62.0,-21.0,10.0],"pay":[3350,-4600,-3550,4800]},{"pt":[29000,19100,55800,-3900],"sc":[9.0,-11.0,66.0,-64.0],"pay":[450,-550,3300,-3200]},{"pt":[25500,19500,35500,19500],"sc":[5.0,-21.0,47.0,-31.0],"pay":[250,-1050,2350,-1550]},{"pt":[46400,17300,-5700,42000],"sc":[57.0,-23.0,-66.0,32.0],"pay":[2850,-1150,-3300,1600]},{"pt":[44200,12100,33200,10500],"sc":[55.0,-28.0,13.0,-40.0],"pay":[2750,-1400,650,-2000]},{"pt":[17300,33000,-4900,54600],"sc":[-23.0,13.0,-65.0,75.0],"pay":[-1150,650,-3250,3750]}],"chips":[-3,-15,-25,43]},{"date":"2025/10/20","players":["南","林","矢田","関河"],"games":[{"pt":[10900,19700,73000,-3600],"sc":[-29.0,0.0,93.0,-64.0],"pay":[-1450,-700,5150,-3000]},{"pt":[32700,19000,22500,25800],"sc":[43.0,-31.0,-18.0,6.0],"pay":[2150,-1550,-900,300]},{"pt":[6800,51000,7400,34800],"sc":[-43.0,61.0,-33.0,15.0],"pay":[-2150,3050,-1650,750]},{"pt":[25200,-8100,17400,65500],"sc":[5.0,-68.0,-23.0,86.0],"pay":[250,-3400,-1150,4300]},{"pt":[0,0,0,0],"sc":[0.0,0.0,0.0,0.0],"pay":[0,0,0,0]}],"chips":[0,-7,5,2]},{"date":"2025/10/21","players":["南","矢田","西村","関河"],"games":[{"pt":[29500,23800,12300,34400],"sc":[9.0,-16.0,-38.0,45.0],"pay":[1250,-2100,-2400,3250]},{"pt":[37500,-5700,33600,34600],"sc":[47.0,-66.0,4.0,15.0],"pay":[2350,-3300,200,750]},{"pt":[33300,-1500,22500,45700],"sc":[23.0,-61.0,-18.0,56.0],"pay":[1150,-3050,-900,2800]}],"chips":[8,-13,-5,10]},{"date":"2025/11/07","players":["南","林","西村","関河"],"games":[{"pt":[-1500,40400,3500,57600],"sc":[-61.0,30.0,-37.0,68.0],"pay":[-4050,1500,-1850,4400]},{"pt":[24500,31800,23300,20400],"sc":[4.0,43.0,-17.0,-30.0],"pay":[200,2150,-850,-1500]},{"pt":[13800,-300,36300,50200],"sc":[-26.0,-60.0,26.0,60.0],"pay":[-1300,-3000,1300,3000]},{"pt":[-700,47200,31300,22200],"sc":[-61.0,58.0,21.0,-18.0],"pay":[-3050,2900,1050,-900]},{"pt":[0,0,0,0],"sc":[0.0,0.0,0.0,0.0],"pay":[0,0,0,0]}],"chips":[-10,0,0,10]},{"date":"2025/11/13","players":["南","古川","林","西村"],"games":[{"pt":[56900,30900,-1000,13200],"sc":[67.0,21.0,-61.0,-27.0],"pay":[4150,1150,-3750,-1550]},{"pt":[31100,29000,22100,17800],"sc":[41.0,9.0,-18.0,-32.0],"pay":[2050,450,-900,-1600]}],"chips":[8,1,-7,-2]},{"date":"2025/11/19","players":["南","林","谷垣","関河"],"games":[{"pt":[-4000,31900,40000,32100],"sc":[-54.0,-8.0,50.0,12.0],"pay":[-4100,-1300,5700,-300]},{"pt":[-2500,37800,24400,40300],"sc":[-62.0,18.0,-16.0,60.0],"pay":[-3100,900,-800,3000]},{"pt":[9400,22800,38500,29300],"sc":[-41.0,-17.0,49.0,9.0],"pay":[-2050,-850,2450,450]},{"pt":[16700,29100,15700,38500],"sc":[-23.0,9.0,-34.0,48.0],"pay":[-1150,450,-1700,2400]},{"pt":[26900,27100,75500,-29500],"sc":[-13.0,7.0,95.0,-89.0],"pay":[-650,350,4750,-4450]},{"pt":[0,0,0,0],"sc":[0.0,0.0,0.0,0.0],"pay":[0,0,0,0]}],"chips":[-14,-9,32,-9]},{"date":"2025/11/27","players":["南","熊坂","西村","関河"],"games":[{"pt":[27000,21100,32700,19200],"sc":[7.0,-19.0,43.0,-31.0],"pay":[250,-1750,2550,-1050]},{"pt":[31300,15900,32100,20700],"sc":[11.0,-34.0,42.0,-19.0],"pay":[550,-1700,2100,-950]},{"pt":[21600,5900,17400,55100],"sc":[2.0,-44.0,-23.0,65.0],"pay":[100,-2200,-1150,3250]}],"chips":[-1,-8,4,5]},{"date":"2025/12/04","players":["南","脇川","西村","鎌田"],"games":[{"pt":[15200,7900,33400,43500],"sc":[-25.0,-42.0,13.0,54.0],"pay":[-650,-2200,-250,3100]},{"pt":[56100,18500,25600,-200],"sc":[66.0,-22.0,16.0,-60.0],"pay":[3300,-1100,800,-3000]},{"pt":[22200,32100,19400,26300],"sc":[-18.0,43.0,-31.0,6.0],"pay":[-900,2150,-1550,300]},{"pt":[52800,19400,2400,25400],"sc":[64.0,-21.0,-48.0,5.0],"pay":[3200,-1050,-2400,250]}],"chips":[6,-1,-9,4]},{"date":"2025/12/05","players":["南","矢田","鎌田","関河"],"games":[{"pt":[19800,39400,1600,39200],"sc":[-20.0,49.0,-48.0,19.0],"pay":[-1500,2650,-2800,1650]},{"pt":[25100,6200,20700,48000],"sc":[5.0,-44.0,-19.0,58.0],"pay":[250,-2200,-950,2900]},{"pt":[51300,1600,32300,14800],"sc":[61.0,-48.0,12.0,-25.0],"pay":[3050,-2400,600,-1250]}],"chips":[-5,2,-4,7]},{"date":"2025/12/08","players":["南","林","鎌田","関河"],"games":[{"pt":[35400,34800,18100,11700],"sc":[45.0,15.0,-22.0,-38.0],"pay":[1850,1250,-2300,-800]},{"pt":[42900,500,15200,41400],"sc":[54.0,-50.0,-25.0,21.0],"pay":[2700,-2500,-1250,1050]},{"pt":[10900,45200,35700,8200],"sc":[-29.0,55.0,16.0,-42.0],"pay":[-1450,2750,800,-2100]},{"pt":[19200,57100,13600,10100],"sc":[-1.0,67.0,-26.0,-40.0],"pay":[-50,3350,-1300,-2000]},{"pt":[71500,25500,7900,-4900],"sc":[82.0,15.0,-32.0,-65.0],"pay":[4100,750,-1600,-3250]}],"chips":[-4,5,-12,11]},{"date":"2025/12/09","players":["南","林","鎌田","関河"],"games":[{"pt":[6600,51000,-5000,47400],"sc":[-23.0,61.0,-65.0,27.0],"pay":[-1350,4050,-3850,1150]},{"pt":[18800,46200,19400,15600],"sc":[-21.0,56.0,-1.0,-34.0],"pay":[-1050,2800,-50,-1700]},{"pt":[13700,23400,47300,15600],"sc":[-36.0,3.0,57.0,-24.0],"pay":[-1800,150,2850,-1200]},{"pt":[34200,29600,30200,6000],"sc":[44.0,-10.0,10.0,-44.0],"pay":[2200,-500,500,-2200]},{"pt":[23800,43500,19400,13300],"sc":[4.0,54.0,-21.0,-37.0],"pay":[200,2700,-1050,-1850]}],"chips":[-2,10,-6,-2]},{"date":"2025/12/13","players":["佐藤健","南","古川","熊坂"],"games":[{"pt":[60000,-6000,22900,23100],"sc":[80.0,-66.0,-17.0,3.0],"pay":[4000,-3300,-850,150]},{"pt":[35400,24000,10700,29900],"sc":[45.0,-16.0,-39.0,10.0],"pay":[2250,-800,-1950,500]},{"pt":[33500,13200,22000,31300],"sc":[44.0,-37.0,-18.0,11.0],"pay":[2200,-1850,-900,550]}],"chips":[0,0,0,0]},{"date":"2025/12/13","players":["佐藤裕","南","古川","鎌田"],"games":[{"pt":[49300,26800,31000,-7100],"sc":[69.0,-13.0,11.0,-67.0],"pay":[3450,-650,550,-3350]},{"pt":[18400,54100,-3700,31200],"sc":[-22.0,75.0,-64.0,11.0],"pay":[-1100,3750,-3200,550]},{"pt":[9500,39600,24000,26900],"sc":[-41.0,50.0,-16.0,7.0],"pay":[-2050,2500,-800,350]}],"chips":[0,0,0,0]},{"date":"2025/12/13","players":["佐藤裕","南","林","熊坂"],"games":[{"pt":[-5200,71400,28400,5400],"sc":[-65.0,92.0,8.0,-35.0],"pay":[-3250,4600,400,-1750]},{"pt":[48000,-6900,48100,10800],"sc":[28.0,-67.0,68.0,-29.0],"pay":[1400,-3350,3400,-1450]}],"chips":[0,0,0,0]},{"date":"2025/12/22","players":["南","林","矢田","関河"],"games":[{"pt":[18700,17800,29300,34200],"sc":[-21.0,-32.0,9.0,44.0],"pay":[550,-1900,-850,2200]},{"pt":[48600,45500,-2600,8500],"sc":[70.0,25.0,-63.0,-32.0],"pay":[3500,1250,-3150,-1600]},{"pt":[34000,18000,-2700,50700],"sc":[14.0,-22.0,-63.0,71.0],"pay":[700,-1100,-3150,3550]},{"pt":[38600,35100,-3400,29700],"sc":[58.0,15.0,-63.0,-10.0],"pay":[2900,750,-3150,-500]}],"chips":[16,-3,-13,0]},{"date":"2026/01/06","players":["南","林","鎌田","関河"],"games":[{"pt":[23700,34300,24700,17300],"sc":[-16.0,44.0,5.0,-33.0],"pay":[300,2300,50,-2650]},{"pt":[39200,-5100,48800,17100],"sc":[19.0,-65.0,69.0,-23.0],"pay":[950,-3250,3450,-1150]},{"pt":[16100,8400,43600,31900],"sc":[-24.0,-42.0,54.0,12.0],"pay":[-1200,-2100,2700,600]},{"pt":[20000,24600,39100,16300],"sc":[-20.0,5.0,49.0,-34.0],"pay":[-1000,250,2450,-1700]}],"chips":[11,1,-2,-10]},{"date":"2026/01/08","players":["南","古川","西村","鎌田"],"games":[{"pt":[-200,17900,18000,64300],"sc":[-60.0,-22.0,-2.0,84.0],"pay":[-4100,300,-1000,4800]},{"pt":[21900,33300,19200,25600],"sc":[-18.0,43.0,-31.0,6.0],"pay":[-900,2150,-1550,300]},{"pt":[12700,44700,39800,2800],"sc":[-27.0,54.0,20.0,-47.0],"pay":[-1350,2700,1000,-2350]},{"pt":[33800,70000,-8000,4200],"sc":[14.0,80.0,-58.0,-36.0],"pay":[700,4000,-2900,-1800]}],"chips":[-11,14,-9,6]},{"date":"2026/01/23","players":["佐藤健","南","鎌田","関河"],"games":[{"pt":[24900,21600,30200,23300],"sc":[5.0,-28.0,40.0,-17.0],"pay":[450,-100,900,-1250]},{"pt":[36400,26900,24500,12200],"sc":[47.0,7.0,-16.0,-38.0],"pay":[2350,350,-800,-1900]},{"pt":[24700,36200,10500,28600],"sc":[-15.0,46.0,-40.0,9.0],"pay":[-750,2300,-2000,450]},{"pt":[800,44900,36400,17900],"sc":[-49.0,55.0,16.0,-22.0],"pay":[-2450,2750,800,-1100]}],"chips":[2,13,-11,-4]},{"date":"2026/01/26","players":["南","林","鎌田","関河"],"games":[{"pt":[28400,38600,20600,12400],"sc":[8.0,49.0,-19.0,-38.0],"pay":[1200,850,-750,-1300]},{"pt":[-11000,41400,39000,30600],"sc":[-71.0,61.0,19.0,-9.0],"pay":[-3550,3050,950,-450]},{"pt":[50500,8300,-5000,46200],"sc":[61.0,-32.0,-65.0,36.0],"pay":[3050,-1600,-3250,1800]},{"pt":[37700,18000,16200,28100],"sc":[48.0,-22.0,-34.0,8.0],"pay":[2400,-1100,-1700,400]},{"pt":[24200,8500,39100,28200],"sc":[-16.0,-42.0,50.0,8.0],"pay":[-800,-2100,2500,400]},{"pt":[-9000,20100,62600,26300],"sc":[-69.0,-20.0,83.0,6.0],"pay":[-3450,-1000,4150,300]}],"chips":[8,-16,2,6]},{"date":"2026/01/28","players":["南","林","谷垣","関河"],"games":[{"pt":[30100,63300,-300,6900],"sc":[10.0,83.0,-60.0,-33.0],"pay":[-800,6850,-4000,-2050]},{"pt":[42200,13700,15100,29000],"sc":[52.0,-36.0,-25.0,9.0],"pay":[2600,-1800,-1250,450]},{"pt":[200,71000,-2000,30800],"sc":[-40.0,91.0,-62.0,11.0],"pay":[-2000,4550,-3100,550]},{"pt":[20100,20700,24200,35000],"sc":[-30.0,-19.0,4.0,45.0],"pay":[-1500,-950,200,2250]},{"pt":[-1300,48200,28500,24600],"sc":[-61.0,58.0,8.0,-5.0],"pay":[-3050,2900,400,-250]}],"chips":[-13,27,-10,-4]},{"date":"2026/01/29","players":["南","林","矢田","関河"],"games":[{"pt":[11900,43600,46300,-1800],"sc":[-18.0,24.0,56.0,-62.0],"pay":[-2800,-200,6800,-3800]},{"pt":[-500,6700,6900,86900],"sc":[-60.0,-33.0,-13.0,106.0],"pay":[-3000,-1650,-650,5300]},{"pt":[300,-1400,67800,33300],"sc":[-40.0,-51.0,78.0,13.0],"pay":[-2000,-2550,3900,650]},{"pt":[32700,18200,12500,36600],"sc":[13.0,-22.0,-38.0,47.0],"pay":[650,-1100,-1900,2350]},{"pt":[27400,22200,18400,32000],"sc":[7.0,-18.0,-32.0,43.0],"pay":[350,-900,-1600,2150]}],"chips":[-19,-14,40,-7]},{"date":"2026/02/03","players":["杉野","林","熊坂","関河"],"games":[{"pt":[-4000,71000,16000,17000],"sc":[-64.0,91.0,-24.0,-3.0],"pay":[-4000,5650,-2300,650]},{"pt":[29000,13700,-200,57500],"sc":[9.0,-26.0,-60.0,77.0],"pay":[450,-1300,-3000,3850]},{"pt":[47300,34800,20300,-2400],"sc":[67.0,15.0,-20.0,-62.0],"pay":[3350,750,-1000,-3100]},{"pt":[26800,21700,12600,38900],"sc":[7.0,-18.0,-37.0,48.0],"pay":[350,-900,-1850,2400]}],"chips":[-8,11,-11,8]},{"date":"2026/02/04","players":["南","林","矢田","関河"],"games":[{"pt":[47800,40900,14700,-3400],"sc":[67.0,21.0,-25.0,-63.0],"pay":[4450,350,-1850,-2950]},{"pt":[49000,-11800,38800,24000],"sc":[69.0,-72.0,19.0,-16.0],"pay":[3450,-3600,950,-800]},{"pt":[69900,-4100,200,34000],"sc":[80.0,-64.0,-40.0,24.0],"pay":[4000,-3200,-2000,1200]},{"pt":[0,0,0,0],"sc":[0.0,0.0,0.0,0.0],"pay":[0,0,0,0]}],"chips":[11,-7,-6,2]},{"date":"2026/02/18","players":["南","杉野","鎌田","関河"],"games":[{"pt":[36400,25500,-11000,49100],"sc":[16.0,-15.0,-71.0,70.0],"pay":[600,-850,-3950,4200]},{"pt":[33800,29700,26300,10200],"sc":[44.0,10.0,-14.0,-40.0],"pay":[2200,500,-700,-2000]},{"pt":[27700,5600,37700,29000],"sc":[-12.0,-44.0,47.0,9.0],"pay":[-600,-2200,2350,450]},{"pt":[-6900,26400,40600,39900],"sc":[-67.0,-14.0,51.0,30.0],"pay":[-3350,-700,2550,1500]},{"pt":[-6400,1800,62200,42400],"sc":[-66.0,-38.0,72.0,32.0],"pay":[-3300,-1900,3600,1600]}],"chips":[-2,-1,-4,7]},{"date":"2026/02/24","players":["南","矢田","谷垣","関河"],"games":[{"pt":[18600,46900,21400,13100],"sc":[-21.0,57.0,1.0,-37.0],"pay":[-2150,2850,-150,-550]},{"pt":[21800,-7400,37700,47900],"sc":[-18.0,-67.0,28.0,57.0],"pay":[-900,-3350,1400,2850]},{"pt":[13000,41500,30000,15500],"sc":[-37.0,52.0,10.0,-25.0],"pay":[-1850,2600,500,-1250]}],"chips":[-11,0,-2,13]},{"date":"2026/02/25","players":["南","林","矢田","関河"],"games":[{"pt":[26700,49600,24000,-300],"sc":[7.0,69.0,-16.0,-60.0],"pay":[450,2850,-1500,-1800]},{"pt":[5300,16800,36400,41500],"sc":[-45.0,-23.0,16.0,52.0],"pay":[-2250,-1150,800,2600]},{"pt":[32900,44800,-2400,24700],"sc":[13.0,54.0,-62.0,-5.0],"pay":[650,2700,-3100,-250]},{"pt":[62800,8500,1600,27100],"sc":[73.0,-32.0,-48.0,7.0],"pay":[3650,-1600,-2400,350]}],"chips":[1,-6,-7,12]},{"date":"2026/02/27","players":["南","古川","林","矢田"],"games":[{"pt":[-2800,22100,59200,21500],"sc":[-63.0,2.0,70.0,-9.0],"pay":[-2550,300,3300,-1050]},{"pt":[28100,69000,7100,-4200],"sc":[8.0,89.0,-33.0,-64.0],"pay":[400,4450,-1650,-3200]}],"chips":[6,2,-2,-6]},{"date":"2026/03/03","players":["南","林","西村","関河"],"games":[{"pt":[16500,-4100,70600,17000],"sc":[-24.0,-64.0,91.0,-3.0],"pay":[-800,-4000,5750,-950]},{"pt":[29900,21600,15200,33300],"sc":[10.0,-18.0,-35.0,43.0],"pay":[500,-900,-1750,2150]},{"pt":[59600,21100,-400,19700],"sc":[69.0,11.0,-60.0,-20.0],"pay":[3450,550,-3000,-1000]},{"pt":[1200,44000,26100,28700],"sc":[-49.0,54.0,-14.0,9.0],"pay":[-2450,2700,-700,450]},{"pt":[0,0,0,0],"sc":[0.0,0.0,0.0,0.0],"pay":[0,0,0,0]}],"chips":[4,-8,12,-8]},{"date":"2026/03/04","players":["南","林","近藤","関河"],"games":[{"pt":[64900,24000,11700,-600],"sc":[85.0,4.0,-28.0,-61.0],"pay":[4050,-1700,600,-2950]},{"pt":[32100,2300,62300,3300],"sc":[12.0,-48.0,73.0,-37.0],"pay":[600,-2400,3650,-1850]},{"pt":[35300,20700,3400,40600],"sc":[15.0,-19.0,-47.0,51.0],"pay":[750,-950,-2350,2550]},{"pt":[45100,21900,13700,19300],"sc":[55.0,2.0,-36.0,-21.0],"pay":[2750,100,-1800,-1050]},{"pt":[-500,19000,41500,40000],"sc":[-60.0,-21.0,51.0,30.0],"pay":[-3000,-1050,2550,1500]}],"chips":[-2,-19,20,1]},{"date":"2026/03/09","players":["南","横山","西村","関河"],"games":[{"pt":[45400,6400,49800,-1600],"sc":[35.0,-34.0,61.0,-62.0],"pay":[3150,-4300,5950,-4800]},{"pt":[43600,8000,19200,29200],"sc":[54.0,-42.0,-21.0,9.0],"pay":[2700,-2100,-1050,450]},{"pt":[51800,-3300,21700,29800],"sc":[71.0,-63.0,-18.0,10.0],"pay":[3550,-3150,-900,500]},{"pt":[40500,15700,53100,-9300],"sc":[30.0,-24.0,63.0,-69.0],"pay":[1500,-1200,3150,-3450]},{"pt":[12200,8700,42700,36400],"sc":[-28.0,-41.0,53.0,16.0],"pay":[-1400,-2050,2650,800]}],"chips":[14,-26,29,-17]},{"date":"2026/03/10","players":["南","脇川","鎌田","関河"],"games":[{"pt":[38900,16300,24800,20000],"sc":[49.0,-34.0,5.0,-20.0],"pay":[2750,-1500,-650,-600]},{"pt":[13100,38500,24900,23500],"sc":[-37.0,49.0,5.0,-17.0],"pay":[-1850,2450,250,-850]},{"pt":[20900,28900,20000,30200],"sc":[-19.0,9.0,-30.0,40.0],"pay":[-950,450,-1500,2000]},{"pt":[25900,30600,29000,14500],"sc":[-14.0,41.0,9.0,-36.0],"pay":[-700,2050,450,-1800]}],"chips":[3,2,-9,4]},{"date":"2026/03/17","players":["佐藤裕","南","鎌田","関河"],"games":[{"pt":[36700,3300,25400,34600],"sc":[47.0,-47.0,-15.0,15.0],"pay":[1250,-150,-2050,950]},{"pt":[26000,43000,13200,17800],"sc":[6.0,53.0,-37.0,-22.0],"pay":[300,2650,-1850,-1100]},{"pt":[12500,10600,38800,38100],"sc":[-28.0,-39.0,49.0,18.0],"pay":[-1400,-1950,2450,900]},{"pt":[-2000,53300,24000,24700],"sc":[-62.0,63.0,-16.0,15.0],"pay":[-3100,3150,-800,750]},{"pt":[16300,45500,-3600,41800],"sc":[-14.0,56.0,-64.0,22.0],"pay":[-700,2800,-3200,1100]}],"chips":[-11,22,-13,2]},{"date":"2026/03/18","players":["南","林","脇川","関河"],"games":[{"pt":[42000,-300,36000,22300],"sc":[52.0,-60.0,16.0,-8.0],"pay":[2600,-3100,600,-100]},{"pt":[11600,43600,15300,29500],"sc":[-38.0,54.0,-25.0,9.0],"pay":[-1900,2700,-1250,450]},{"pt":[-7700,56100,22300,29300],"sc":[-68.0,77.0,-18.0,9.0],"pay":[-3400,3850,-900,450]},{"pt":[37800,-800,48500,14500],"sc":[28.0,-61.0,59.0,-26.0],"pay":[1400,-3050,2950,-1300]},{"pt":[37900,25600,-3900,40400],"sc":[28.0,-14.0,-64.0,50.0],"pay":[1400,-700,-3200,2500]},{"pt":[22400,48500,9900,19200],"sc":[2.0,59.0,-40.0,-21.0],"pay":[100,2950,-2000,-1050]}],"chips":[0,-1,-2,3]},{"date":"2026/03/30","players":["南","矢田","西村","関河"],"games":[{"pt":[23400,11400,36100,29100],"sc":[-17.0,-39.0,47.0,9.0],"pay":[-1850,-1850,3150,550]},{"pt":[41600,-500,18400,40500],"sc":[62.0,-60.0,-22.0,20.0],"pay":[3100,-3000,-1100,1000]},{"pt":[-1800,31600,39500,30700],"sc":[-62.0,12.0,59.0,-9.0],"pay":[-3100,600,2950,-450]},{"pt":[15700,47500,38400,-1600],"sc":[-24.0,68.0,18.0,-62.0],"pay":[-1200,3400,900,-3100]},{"pt":[31100,36000,21000,11900],"sc":[11.0,46.0,-19.0,-38.0],"pay":[550,2300,-950,-1900]},{"pt":[0,0,0,0],"sc":[0.0,0.0,0.0,0.0],"pay":[0,0,0,0]}],"chips":[-10,1,8,1]},{"date":"2026/03/31","players":["南","西村","鎌田","関河"],"games":[{"pt":[28900,41200,12700,17200],"sc":[9.0,51.0,-37.0,-23.0],"pay":[-1050,5150,-2450,-1650]},{"pt":[-1900,40500,33300,28100],"sc":[-62.0,61.0,13.0,-12.0],"pay":[-3100,3050,650,-600]},{"pt":[41800,31300,14000,12900],"sc":[52.0,11.0,-26.0,-37.0],"pay":[2600,550,-1300,-1850]},{"pt":[32900,50600,-1400,17900],"sc":[13.0,70.0,-61.0,-22.0],"pay":[650,3500,-3050,-1100]},{"pt":[19400,16300,19000,45300],"sc":[-1.0,-34.0,-21.0,56.0],"pay":[-50,-1700,-1050,2800]},{"pt":[7000,32900,21200,38900],"sc":[-43.0,13.0,-19.0,49.0],"pay":[-2150,650,-950,2450]}],"chips":[-15,26,-6,-5]},{"date":"2026/04/07","players":["南","熊坂","近藤","関河"],"games":[{"pt":[30400,-800,21200,49200],"sc":[10.0,-61.0,-19.0,70.0],"pay":[-200,-4050,750,3500]},{"pt":[23000,20000,67000,-10000],"sc":[3.0,-20.0,87.0,-70.0],"pay":[150,-1000,4350,-3500]},{"pt":[-1500,35300,38500,27700],"sc":[-61.0,25.0,48.0,-12.0],"pay":[-3050,1250,2400,-600]},{"pt":[5600,37900,37800,18700],"sc":[-44.0,47.0,18.0,-21.0],"pay":[-2200,2350,900,-1050]},{"pt":[33600,-4800,27900,43300],"sc":[14.0,-65.0,-2.0,53.0],"pay":[700,-3250,-100,2650]}],"chips":[-7,-10,17,0]},{"date":"2026/04/08","players":["南","古川","西村","関河"],"games":[{"pt":[32400,15300,25200,27100],"sc":[43.0,-35.0,-15.0,7.0],"pay":[2050,-2350,50,250]},{"pt":[25000,8100,53000,13900],"sc":[5.0,-42.0,63.0,-26.0],"pay":[250,-2100,3150,-1300]},{"pt":[25000,8200,27600,39200],"sc":[-15.0,-42.0,8.0,49.0],"pay":[-750,-2100,400,2450]},{"pt":[29200,43800,7600,19400],"sc":[9.0,54.0,-42.0,-21.0],"pay":[450,2700,-2100,-1050]}],"chips":[-1,-6,8,-1]},{"date":"2026/04/13","players":["脇川","近藤","鎌田","関河"],"games":[{"pt":[45900,24000,6000,24100],"sc":[56.0,-16.0,-44.0,4.0],"pay":[2000,-1400,-2200,1600]},{"pt":[36100,-11000,17100,57800],"sc":[16.0,-61.0,-23.0,68.0],"pay":[800,-3050,-1150,3400]},{"pt":[17200,-5000,55800,32000],"sc":[-23.0,-65.0,66.0,22.0],"pay":[-1150,-3250,3300,1100]},{"pt":[-2000,31000,44000,27000],"sc":[-62.0,21.0,54.0,-13.0],"pay":[-3100,1050,2700,-650]},{"pt":[33000,8000,-10000,69000],"sc":[13.0,-32.0,-60.0,79.0],"pay":[650,-1600,-3000,3950]}],"chips":[-8,-6,0,14]},{"date":"2026/04/19","players":["杉野","林","藤田","関河"],"games":[{"pt":[32000,52000,-2000,18000],"sc":[22.0,62.0,-62.0,-22.0],"pay":[400,3600,-3300,-700]},{"pt":[5400,25900,24700,44000],"sc":[-45.0,6.0,-15.0,54.0],"pay":[-2250,300,-750,2700]},{"pt":[29000,32000,12000,27000],"sc":[9.0,42.0,-38.0,-13.0],"pay":[450,2100,-1900,-650]},{"pt":[32000,-8000,24000,52000],"sc":[12.0,-68.0,-16.0,72.0],"pay":[600,-3400,-800,3600]},{"pt":[-6000,55000,38000,13000],"sc":[-66.0,65.0,18.0,-17.0],"pay":[-3300,3250,900,-850]},{"pt":[24000,30000,9000,37000],"sc":[-16.0,10.0,-41.0,47.0],"pay":[-800,500,-2050,2350]}],"chips":[-7,5,-2,4]},{"date":"2026/04/29","players":["古川","西村","鎌田","関河"],"games":[{"pt":[10400,38500,33800,17300],"sc":[-40.0,49.0,14.0,-23.0],"pay":[-1500,1350,3000,-2850]},{"pt":[42300,31500,7500,18700],"sc":[53.0,11.0,-43.0,-21.0],"pay":[2650,550,-2150,-1050]},{"pt":[37100,27500,40600,-5200],"sc":[27.0,-13.0,51.0,-65.0],"pay":[1350,-650,2550,-3250]},{"pt":[20100,6600,30500,42800],"sc":[-20.0,-43.0,10.0,53.0],"pay":[-1000,-2150,500,2650]},{"pt":[8100,38900,56900,-3900],"sc":[-32.0,29.0,67.0,-64.0],"pay":[-1600,1450,3350,-3200]},{"pt":[60100,11800,-2900,31000],"sc":[80.0,-28.0,-63.0,11.0],"pay":[4000,-1400,-3150,550]},{"pt":[35600,37400,15900,11100],"sc":[16.0,47.0,-24.0,-39.0],"pay":[800,2350,-1200,-1950]},{"pt":[21700,36400,23600,18300],"sc":[-18.0,46.0,4.0,-32.0],"pay":[-900,2300,200,-1600]}],"chips":[5,-11,23,-17]},{"date":"2026/04/30","players":["南","矢田","西村","鎌田"],"games":[{"pt":[41800,25000,10200,23000],"sc":[52.0,5.0,-40.0,-17.0],"pay":[2800,450,-1900,-1350]},{"pt":[10300,33900,20000,35800],"sc":[-40.0,14.0,-20.0,46.0],"pay":[-2000,700,-1000,2300]},{"pt":[13800,12800,-800,74200],"sc":[-6.0,-27.0,-61.0,94.0],"pay":[-300,-1350,-3050,4700]},{"pt":[-1200,26000,48800,26400],"sc":[-61.0,-4.0,59.0,6.0],"pay":[-3050,-200,2950,300]},{"pt":[0,0,0,0],"sc":[0.0,0.0,0.0,0.0],"pay":[0,0,0,0]}],"chips":[2,2,1,-5]},{"date":"2026/05/07","players":["南","林","脇川","関河"],"games":[{"pt":[-2100,39800,31600,30700],"sc":[-62.0,49.0,12.0,1.0],"pay":[-2500,3750,-300,-950]},{"pt":[11100,45000,29600,14300],"sc":[-39.0,55.0,10.0,-26.0],"pay":[-1950,2750,500,-1300]},{"pt":[27300,26700,47300,-1300],"sc":[7.0,-13.0,67.0,-61.0],"pay":[350,-650,3350,-3050]},{"pt":[32600,5700,30700,31000],"sc":[42.0,-44.0,-9.0,11.0],"pay":[2100,-2200,-450,550]},{"pt":[16400,78600,-3900,8900],"sc":[-4.0,99.0,-64.0,-31.0],"pay":[-200,4950,-3200,-1550]},{"pt":[23600,21800,17700,36900],"sc":[4.0,-18.0,-32.0,46.0],"pay":[200,-900,-1600,2300]}],"chips":[6,13,-9,-10]},{"date":"2026/05/08","players":["南","古川","西村","関河"],"games":[{"pt":[45000,24700,13200,17100],"sc":[55.0,5.0,-37.0,-23.0],"pay":[5950,-950,-4150,-850]},{"pt":[58700,16300,-4000,29000],"sc":[79.0,-24.0,-64.0,9.0],"pay":[3950,-1200,-3200,450]},{"pt":[47500,21000,-4700,36200],"sc":[68.0,-19.0,-65.0,16.0],"pay":[3400,-950,-3250,800]},{"pt":[56800,2400,26400,14400],"sc":[68.0,-48.0,6.0,-26.0],"pay":[3400,-2400,300,-1300]},{"pt":[31300,40500,4200,24000],"sc":[11.0,51.0,-46.0,-16.0],"pay":[550,2550,-2300,-800]},{"pt":[14700,42600,17400,25300],"sc":[-35.0,53.0,-23.0,5.0],"pay":[-1750,2650,-1150,250]}],"chips":[32,-12,-23,3]},{"date":"2026/05/18","players":["南","矢田","谷垣","関河"],"games":[{"pt":[21300,34700,25600,18400],"sc":[-19.0,45.0,6.0,-32.0],"pay":[-850,1550,-100,-600]},{"pt":[8200,19100,27600,45100],"sc":[-42.0,-21.0,8.0,55.0],"pay":[-2100,-1050,400,2750]},{"pt":[15500,19500,-5900,70900],"sc":[-25.0,9.0,-66.0,82.0],"pay":[-1250,450,-3300,4100]}],"chips":[1,-7,-4,10]},{"date":"2026/05/25","players":["南","林","脇川","関河"],"games":[{"pt":[47000,3600,33400,16000],"sc":[57.0,-46.0,13.0,-24.0],"pay":[3250,-3500,2250,-2000]},{"pt":[48600,4900,39700,6800],"sc":[58.0,-45.0,20.0,-33.0],"pay":[2900,-2250,1000,-1650]},{"pt":[19200,20100,16600,44100],"sc":[-21.0,0.0,-33.0,54.0],"pay":[-1050,0,-1650,2700]},{"pt":[19100,10400,21200,49300],"sc":[-21.0,-40.0,1.0,60.0],"pay":[-1050,-2000,50,3000]}],"chips":[4,-12,16,-8]},{"date":"2026/05/29","players":["南","林","脇川","関河"],"games":[{"pt":[22500,27300,52700,-2500],"sc":[-18.0,17.0,63.0,-62.0],"pay":[-700,1150,3250,-3700]},{"pt":[10100,11300,30200,48400],"sc":[-40.0,-29.0,10.0,59.0],"pay":[-2000,-1450,500,2950]},{"pt":[-3600,47400,31800,24400],"sc":[-64.0,58.0,22.0,-16.0],"pay":[-3200,2900,1100,-800]},{"pt":[-3100,38500,38400,26200],"sc":[-63.0,49.0,28.0,-14.0],"pay":[-3150,2450,1400,-700]},{"pt":[43300,16900,21000,18800],"sc":[53.0,-33.0,1.0,-21.0],"pay":[2650,-1650,50,-1050]},{"pt":[26000,6100,27900,40000],"sc":[-14.0,-44.0,8.0,50.0],"pay":[-700,-2200,400,2500]}],"chips":[2,3,1,-6]},{"date":"2026/07/31","players":["南","古川","林","西村"],"games":[{"pt":[23500,-2800,43500,35800],"sc":[-17.0,-63.0,64.0,16.0],"pay":[250,-3450,2600,600]},{"pt":[2100,32100,47400,18400],"sc":[-48.0,12.0,58.0,-22.0],"pay":[-2400,600,2900,-1100]},{"pt":[13000,33500,22300,31200],"sc":[-37.0,44.0,-18.0,11.0],"pay":[-1850,2200,-900,550]},{"pt":[34800,27700,-200,37700],"sc":[25.0,-12.0,-60.0,47.0],"pay":[1250,-600,-3000,2350]},{"pt":[-3900,33600,19400,50900],"sc":[-64.0,14.0,-21.0,71.0],"pay":[-3200,700,-1050,3550]},{"pt":[46400,-7300,33000,27900],"sc":[56.0,-67.0,23.0,-12.0],"pay":[2800,-3350,1150,-600]}],"chips":[11,-3,-6,-2]},{"date":"2026/09/03","players":["南","林","藤原","西村"],"games":[{"pt":[43300,22100,37200,-2600],"sc":[64.0,-18.0,17.0,-63.0],"pay":[2600,-1100,350,-1850]},{"pt":[8300,47900,2400,41400],"sc":[-32.0,59.0,-48.0,21.0],"pay":[-1600,2950,-2400,1050]},{"pt":[30800,38800,17300,13100],"sc":[11.0,49.0,-23.0,-37.0],"pay":[550,2450,-1150,-1850]},{"pt":[38200,31500,-2700,33000],"sc":[49.0,-9.0,-63.0,23.0],"pay":[2450,-450,-3150,1150]}],"chips":[-6,-2,-5,13]},{"date":"2026/09/16","players":["南","古川","藤原","西村"],"games":[{"pt":[25900,53200,-700,21600],"sc":[6.0,73.0,-61.0,-18.0],"pay":[1300,5250,-4350,-2200]},{"pt":[57900,700,15500,25900],"sc":[68.0,-49.0,-25.0,6.0],"pay":[3400,-2450,-1250,300]},{"pt":[15200,54400,14400,16000],"sc":[-25.0,65.0,-36.0,-4.0],"pay":[-1250,3250,-1800,-200]}],"chips":[10,16,-13,-13]},{"date":"2026/09/23","players":["古川","熊坂","藤原","鎌田"],"games":[{"pt":[34000,45000,15000,6000],"sc":[14.0,55.0,-25.0,-44.0],"pay":[-300,2350,-1250,-800]},{"pt":[24000,-9000,61000,24000],"sc":[-16.0,-59.0,71.0,4.0],"pay":[-800,-2950,3550,200]},{"pt":[31000,7000,35000,27000],"sc":[11.0,-43.0,45.0,-13.0],"pay":[550,-2150,2250,-650]},{"pt":[-1000,25000,51000,25000],"sc":[-51.0,5.0,61.0,-15.0],"pay":[-2550,250,3050,-750]},{"pt":[-8000,46000,30000,32000],"sc":[-58.0,56.0,-10.0,12.0],"pay":[-2900,2800,-500,600]},{"pt":[13000,42000,30000,15000],"sc":[-37.0,52.0,10.0,-25.0],"pay":[-1850,2600,500,-1250]},{"pt":[34000,32000,-3000,37000],"sc":[14.0,-8.0,-53.0,47.0],"pay":[700,-400,-2650,2350]}],"chips":[-10,-4,0,14]},{"date":"2026/10/07","players":["南","林","矢田","関河"],"games":[{"pt":[28800,4600,60500,6100],"sc":[9.0,-45.0,70.0,-34.0],"pay":[1850,-2450,3100,-2500]},{"pt":[52100,27800,12200,7900],"sc":[62.0,8.0,-28.0,-42.0],"pay":[3100,400,-1400,-2100]},{"pt":[32800,36000,11500,19700],"sc":[13.0,46.0,-39.0,-20.0],"pay":[650,2300,-1950,-1000]},{"pt":[24800,36400,31300,7500],"sc":[-15.0,47.0,11.0,-43.0],"pay":[-750,2350,550,-2150]}],"chips":[14,-2,-4,-8]},{"date":"2026/10/12","players":["古川","熊坂","藤原","西村"],"games":[{"pt":[22800,34800,28200,14200],"sc":[-17.0,45.0,8.0,-36.0],"pay":[-850,1650,1000,-1800]},{"pt":[14700,24500,30000,30800],"sc":[-35.0,-16.0,10.0,41.0],"pay":[-1750,-800,500,2050]},{"pt":[82300,-100,700,17100],"sc":[92.0,-60.0,-39.0,7.0],"pay":[4600,-3000,-1950,350]},{"pt":[47400,28800,-1200,25000],"sc":[57.0,19.0,-61.0,-15.0],"pay":[2850,950,-3050,-750]},{"pt":[2200,44800,14600,38400],"sc":[-48.0,55.0,-25.0,18.0],"pay":[-2400,2750,-1250,900]},{"pt":[13200,23400,27600,35800],"sc":[-37.0,-17.0,8.0,46.0],"pay":[-1850,-850,400,2300]}],"chips":[0,-6,6,0]}];
 
-const playerTotals={},playerGames={},playerSessions={},playerRanks={},playerRankSum={},playerSessionCount={},playerChips={},playerGameRanks={},playerTobi={};
-allData.forEach(function(sess){
-  var sorted=sess.scores.slice().sort(function(a,b){return b-a;});
-  sess.players.forEach(function(p,i){
-    if(!playerTotals[p]){
-      playerTotals[p]=0;playerGames[p]=0;playerSessions[p]=[];
-      playerRanks[p]={1:0,2:0,3:0,4:0};playerRankSum[p]=0;playerSessionCount[p]=0;
-      playerChips[p]=0;playerGameRanks[p]={1:0,2:0,3:0,4:0};playerTobi[p]=0;
-    }
-    playerTotals[p]+=sess.payouts[i];
-    playerGames[p]+=sess.games;
-    var chip=sess.chips&&sess.chips[i]?sess.chips[i]:0;
-    playerChips[p]+=chip;
-    playerSessions[p].push({date:sess.date,score:sess.scores[i],payout:sess.payouts[i],chip:chip});
-    playerSessionCount[p]++;
-    var rank=sorted.indexOf(sess.scores[i])+1;
-    if(playerRanks[p][rank]!==undefined) playerRanks[p][rank]++;
-    playerRankSum[p]+=rank;
-    // 局ごとの順位を集計
-    if(sess.game_ranks&&sess.game_ranks[p]){
-      var gr=sess.game_ranks[p];
-      for(var r=1;r<=4;r++){
-        playerGameRanks[p][r]+=(gr[r]||0);
-      }
-    }
-    // 飛び回数を集計
-    if(sess.game_tobi&&sess.game_tobi[p]){
-      playerTobi[p]+=(sess.game_tobi[p]||0);
-    }
+// ---------- 共通 ----------
+const BASE_COLORS = {'南':'#378ADD','林':'#1D9E75','関河':'#D85A30','古川':'#D4537E','熊坂':'#7F77DD','矢田':'#BA7517','西村':'#8A8A82','鎌田':'#639922','藤田':'#B0472A'};
+const EXTRA_COLORS = ['#0F9DAA','#C23B8E','#5B6CD6','#A0861A','#2F8F4E','#E0703A','#7A5BC4','#3A86A8','#B5566E','#4E9A2A','#C77D16','#6B6BB5'];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const yen = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n).toLocaleString();
+const sgn = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(Math.round(n * 10) / 10);
+const cls = n => n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero';
+const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// ---------- 集計 ----------
+// プレイヤーごとの半荘・セッション明細（古い順）
+const P = {};
+function ensure(p) {
+  return P[p] || (P[p] = {name: p, games: [], sessions: []});
+}
+function ranksOf(arr) { // 大きい順の順位（同点は同順位）
+  return arr.map(v => 1 + arr.filter(x => x > v).length);
+}
+DATA.forEach((s, si) => {
+  const n = s.players.length;
+  const pay = Array(n).fill(0), sc = Array(n).fill(0);
+  s.games.forEach((g, gi) => {
+    const rk = ranksOf(g.sc);
+    s.players.forEach((p, i) => {
+      pay[i] += g.pay[i]; sc[i] += g.sc[i];
+      ensure(p).games.push({si, date: s.date, rank: rk[i], sc: g.sc[i], pay: g.pay[i],
+        chip: gi === 0 ? s.chips[i] : 0, tobi: g.pt[i] < 0 ? 1 : 0});
+    });
+  });
+  s.pay = pay; s.sc = sc.map(v => Math.round(v * 10) / 10);
+  const srk = ranksOf(s.sc);
+  s.players.forEach((p, i) => {
+    ensure(p).sessions.push({si, date: s.date, rank: srk[i], sc: s.sc[i], pay: pay[i], chip: s.chips[i], games: s.games.length});
   });
 });
 
-var players=Object.keys(playerTotals).sort(function(a,b){return playerTotals[b]-playerTotals[a];});
-
-// 年度別収支集計
-var yearlyData={};
-allData.forEach(function(sess){
-  var year=sess.date.slice(0,4);
-  if(!yearlyData[year]) yearlyData[year]={};
-  sess.players.forEach(function(p,i){
-    if(!yearlyData[year][p]) yearlyData[year][p]=0;
-    yearlyData[year][p]+=sess.payouts[i];
+// 半荘明細から成績をまとめる
+function summarize(games) {
+  const r = {n: games.length, pay: 0, chip: 0, sc: 0, tobi: 0, rk: {1:0,2:0,3:0,4:0}, rsum: 0};
+  games.forEach(g => {
+    r.pay += g.pay; r.chip += g.chip; r.sc += g.sc; r.tobi += g.tobi;
+    r.rk[g.rank] = (r.rk[g.rank] || 0) + 1; r.rsum += g.rank;
   });
-});
-var years=Object.keys(yearlyData).sort();
-
-function fmt(n){ return (n>=0?'+':'')+n.toLocaleString(); }
-function fmtS(n){ return (n>=0?'+':'')+n; }
-function avgRank(p){ return (playerRankSum[p]/playerSessionCount[p]).toFixed(2); }
-function rankRate(p,r){ return Math.round((playerRanks[p][r]||0)/playerSessionCount[p]*100); }
-function gameRankRate(p,r){ return playerGames[p]>0?Math.round((playerGameRanks[p][r]||0)/playerGames[p]*100):0; }
-function tobiRate(p){ return playerGames[p]>0?Math.round((playerTobi[p]||0)/playerGames[p]*100):0; }
-function col(p){ return COLORS[p]||'#888888'; }
-
-function showPage(name,btn){
-  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('show');});
-  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
-  document.getElementById('page-'+name).classList.add('show');
-  btn.classList.add('active');
-  if(name==='trend') renderTrend();
-  if(name==='stats') renderStats();
-  if(name==='yearly') renderYearly();
-  if(name==='history') renderHistory();
+  r.avg = r.n ? r.rsum / r.n : 0;
+  return r;
 }
 
-function showOverview(){
-  document.getElementById('detail-view').classList.remove('show');
+const ALL = {};
+Object.values(P).forEach(p => { ALL[p.name] = summarize(p.games); ALL[p.name].sessions = p.sessions.length; });
+const players = Object.keys(P).sort((a, b) => ALL[b].pay - ALL[a].pay);
+
+// 色：既定色＋参加数の多い順に追加色
+const COLORS = Object.assign({}, BASE_COLORS);
+let ci = 0;
+Object.keys(P).sort((a, b) => P[b].games.length - P[a].games.length).forEach(p => {
+  if (!COLORS[p]) COLORS[p] = EXTRA_COLORS[ci++ % EXTRA_COLORS.length];
+});
+const col = p => COLORS[p] || '#888888';
+
+function avatar(p, size) {
+  const st = size ? 'width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.4) + 'px;' : '';
+  return '<div class="avatar" style="' + st + 'background:' + col(p) + '22;color:' + col(p) + '">' + esc(p[0]) + '</div>';
+}
+function chipPill(c) {
+  return '<span class="chip-pill num ' + cls(c) + '">チップ ' + sgn(c) + '枚</span>';
+}
+function rankNum(i) {
+  return '<div class="rank-num num ' + (i < 3 ? 'r' + (i + 1) : '') + '">' + (i + 1) + '</div>';
+}
+
+// ---------- Chart.js 共通設定 ----------
+const charts = {};
+function chartBase() {
+  Chart.defaults.color = css('--text2');
+  Chart.defaults.borderColor = css('--border');
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+}
+function makeChart(id, cfg) {
+  if (charts[id]) charts[id].destroy();
+  chartBase();
+  charts[id] = new Chart(document.getElementById(id), cfg);
+  return charts[id];
+}
+const yenAxis = {ticks: {callback: v => v.toLocaleString()}};
+const dateTicks = {maxRotation: 0, autoSkip: true, autoSkipPadding: 16, maxTicksLimit: 5};
+
+// ---------- タブ ----------
+const rendered = {};
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(el => el.classList.toggle('show', el.id === 'page-' + name));
+  document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.page === name));
+  if (name === 'ranking') showOverview();
+  const fn = {recent: renderRecent, trend: renderTrend, stats: renderStats, yearly: renderYearly, history: renderHistory}[name];
+  if (fn && !rendered[name]) { fn(); rendered[name] = true; }
+  window.scrollTo(0, 0);
+}
+document.getElementById('tabs').addEventListener('click', e => {
+  const b = e.target.closest('.tab'); if (b) showPage(b.dataset.page);
+});
+
+// ---------- ランキング ----------
+function renderRanking() {
+  document.getElementById('ranking-list').innerHTML = players.map((p, i) => {
+    const a = ALL[p];
+    return '<div class="row click" data-player="' + esc(p) + '">' + rankNum(i) + avatar(p) +
+      '<div class="info"><div class="name">' + esc(p) + '</div><div class="sub num">' + a.sessions + '回 · ' + a.n + '半荘 · 平均' + a.avg.toFixed(2) + '着</div></div>' +
+      '<div class="right"><div class="amount num ' + cls(a.pay) + '">' + yen(a.pay) + '<small>円</small></div>' + chipPill(a.chip) + '</div></div>';
+  }).join('');
+}
+document.getElementById('ranking-list').addEventListener('click', e => {
+  const r = e.target.closest('[data-player]'); if (r) showDetail(r.dataset.player);
+});
+document.getElementById('back-btn').addEventListener('click', showOverview);
+
+function showOverview() {
+  document.getElementById('detail-view').classList.add('hidden');
   document.getElementById('overview-view').classList.remove('hidden');
 }
 
-function showDetail(player){
+function byYear(list) {
+  const y = {};
+  list.forEach(s => { const k = s.date.slice(0, 4); y[k] = (y[k] || 0) + s.pay; });
+  return y;
+}
+function barRows(entries, colorFn) {
+  const max = Math.max(1, ...entries.map(e => Math.abs(e.v)));
+  return entries.map(e =>
+    '<div class="bar-row"><div class="top-line"><span style="color:' + (colorFn ? colorFn(e) : 'var(--text2)') + '">' + esc(e.label) + '</span><span class="num ' + cls(e.v) + '">' + e.text + '</span></div>' +
+    '<div class="bar"><div style="width:' + (Math.abs(e.v) / max * 100) + '%;background:var(--' + (e.v >= 0 ? 'green' : 'red') + ')"></div></div></div>'
+  ).join('');
+}
+
+function showDetail(p) {
   document.getElementById('overview-view').classList.add('hidden');
-  document.getElementById('detail-view').classList.add('show');
-  var sessions=playerSessions[player];
-  var total=playerTotals[player];
-  var sc=playerSessionCount[player];
-  var posNeg=total>=0?'pos':'neg';
-  document.getElementById('detail-metrics').innerHTML=
-    '<div class="metric"><div class="metric-label">'+player+'の総収支</div><div class="metric-value '+posNeg+'">'+fmt(total)+'</div><div class="metric-sub">円</div></div>'+
-    '<div class="metric"><div class="metric-label">累計チップ</div><div class="metric-value '+(playerChips[player]>=0?'pos':'neg')+'">'+playerChips[player]+'</div><div class="metric-sub">枚</div></div>'+
-    '<div class="metric"><div class="metric-label">参加セッション</div><div class="metric-value">'+sc+'</div><div class="metric-sub">回</div></div>'+
-    '<div class="metric"><div class="metric-label">平均順位</div><div class="metric-value">'+avgRank(player)+'</div><div class="metric-sub">位</div></div>';
-  var payouts=sessions.map(function(s){return s.payout;});
-  var best=Math.max.apply(null,payouts);
-  var worst=Math.min.apply(null,payouts);
-  var scoreSum=sessions.reduce(function(a,s){return a+s.score;},0);
-  var r=playerRanks[player];
-  var gr=playerGameRanks[player];
-  document.getElementById('detail-stats').innerHTML=
-    '<div class="stat-row"><span class="stat-label">総プレイ対局数</span><span class="stat-val">'+playerGames[player]+'局</span></div>'+
-    '<div class="stat-row"><span class="stat-label">累計スコア合計</span><span class="stat-val">'+fmtS(scoreSum)+'</span></div>'+
-    '<div class="stat-row"><span class="stat-label">最高収支セッション</span><span class="stat-val pos">'+fmt(best)+'円</span></div>'+
-    '<div class="stat-row"><span class="stat-label">最低収支セッション</span><span class="stat-val neg">'+fmt(worst)+'円</span></div>'+
-    '<div class="stat-row" style="margin-top:6px;font-weight:600;color:var(--text3);font-size:11px;letter-spacing:0.06em">SESSION RANK</div>'+
-    '<div class="stat-row"><span class="stat-label">🥇 1位獲得率</span><span class="stat-val">'+rankRate(player,1)+'%（'+r[1]+'回）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">🥈 2位獲得率</span><span class="stat-val">'+rankRate(player,2)+'%（'+r[2]+'回）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">🥉 3位獲得率</span><span class="stat-val">'+rankRate(player,3)+'%（'+r[3]+'回）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">💀 4位獲得率</span><span class="stat-val">'+rankRate(player,4)+'%（'+r[4]+'回）</span></div>'+
-    '<div class="stat-row" style="margin-top:6px;font-weight:600;color:var(--text3);font-size:11px;letter-spacing:0.06em">GAME RANK（対局単位）</div>'+
-    '<div class="stat-row"><span class="stat-label">🥇 1位獲得率</span><span class="stat-val">'+gameRankRate(player,1)+'%（'+gr[1]+'局）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">🥈 2位獲得率</span><span class="stat-val">'+gameRankRate(player,2)+'%（'+gr[2]+'局）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">🥉 3位獲得率</span><span class="stat-val">'+gameRankRate(player,3)+'%（'+gr[3]+'局）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">💀 4位獲得率</span><span class="stat-val">'+gameRankRate(player,4)+'%（'+gr[4]+'局）</span></div>'+
-    '<div class="stat-row"><span class="stat-label">累計チップ</span><span class="stat-val '+(playerChips[player]>=0?'pos':'neg')+'">'+playerChips[player]+'枚</span></div>'+
-    '<div class="stat-row" style="margin-top:6px;font-weight:600;color:var(--text3);font-size:11px;letter-spacing:0.06em">TOBI</div>'+
-    '<div class="stat-row"><span class="stat-label">💀 飛び率</span><span class="stat-val neg">'+tobiRate(player)+'%（'+playerTobi[player]+'回 / '+playerGames[player]+'局）</span></div>';
-  var ctx=document.getElementById('detailChart').getContext('2d');
-  if(window._dc) window._dc.destroy();
-  var acc=0;
-  var cumData=sessions.map(function(s){acc+=s.payout;return acc;});
-  window._dc=new Chart(ctx,{
-    type:'line',
-    data:{
-      labels:sessions.map(function(s){return s.date.slice(5);}),
-      datasets:[{label:player,data:cumData,borderColor:col(player),backgroundColor:'transparent',tension:0.3,pointRadius:4,borderWidth:2}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return v.toLocaleString();}}}}}
+  document.getElementById('detail-view').classList.remove('hidden');
+  window.scrollTo(0, 0);
+  const a = ALL[p], ss = P[p].sessions, gs = P[p].games;
+  const metric = (label, val, sub, c) => '<div class="metric"><div class="metric-label">' + label + '</div><div class="metric-value num ' + (c || '') + '">' + val + '</div><div class="metric-sub">' + sub + '</div></div>';
+  document.getElementById('detail-metrics').innerHTML =
+    metric(esc(p) + 'の総収支', yen(a.pay), '円', cls(a.pay)) +
+    metric('累計チップ', sgn(a.chip), '枚', cls(a.chip)) +
+    metric('参加', a.sessions, 'セッション / ' + a.n + '半荘') +
+    metric('平均着順', a.avg.toFixed(2), '位（半荘単位）');
+
+  document.getElementById('detail-form').innerHTML = gs.slice(-10).map(g => '<span class="num f' + g.rank + '" title="' + g.date + '">' + g.rank + '</span>').join('');
+
+  const pays = ss.map(s => s.pay);
+  const sr = {1:0,2:0,3:0,4:0}; ss.forEach(s => sr[s.rank]++);
+  const row = (l, v, c) => '<div class="stat-row"><span class="stat-label">' + l + '</span><span class="stat-val num ' + (c || '') + '">' + v + '</span></div>';
+  const medal = ['', '🥇', '🥈', '🥉', '💀'];
+  let h = '<div class="stat-group">半荘単位</div>';
+  for (let r = 1; r <= 4; r++) h += row(medal[r] + ' ' + r + '着率', pct(a.rk[r], a.n) + '%（' + a.rk[r] + '回）');
+  h += row('飛び率', pct(a.tobi, a.n) + '%（' + a.tobi + '回）', a.tobi ? 'neg' : '');
+  h += row('累計スコア', sgn(a.sc));
+  h += '<div class="stat-group">セッション単位</div>';
+  for (let r = 1; r <= 4; r++) h += row(medal[r] + ' ' + r + '位率', pct(sr[r], ss.length) + '%（' + sr[r] + '回）');
+  h += row('最高収支', yen(Math.max(...pays)) + '円', 'pos');
+  h += row('最低収支', yen(Math.min(...pays)) + '円', 'neg');
+  document.getElementById('detail-stats').innerHTML = h;
+
+  let acc = 0;
+  makeChart('detailChart', {
+    type: 'line',
+    data: {labels: ss.map(s => s.date.slice(2)), datasets: [{data: ss.map(s => acc += s.pay), borderColor: col(p), backgroundColor: col(p) + '22', fill: true, tension: 0.25, pointRadius: 3, borderWidth: 2}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: yenAxis, x: {ticks: dateTicks}}}
   });
 
-  // 年度別収支
-  var yearlyHtml='';
-  var totalCheck=0;
-  for(var yi=0;yi<years.length;yi++){
-    var year=years[yi];
-    if(!yearlyData[year]||yearlyData[year][player]===undefined) continue;
-    var val=yearlyData[year][player];
-    totalCheck+=val;
-    var tc=val>=0?'var(--green)':'var(--red)';
-    var barW=Math.min(100,Math.abs(val)/Math.max.apply(null,years.map(function(y){return Math.abs(yearlyData[y]&&yearlyData[y][player]?yearlyData[y][player]:0)||1;}))*100);
-    yearlyHtml+='<div style="margin-bottom:10px;">';
-    yearlyHtml+='<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">';
-    yearlyHtml+='<span style="font-weight:600;color:var(--text2)">'+year+'年</span>';
-    yearlyHtml+='<span style="font-weight:600;color:'+tc+'">'+fmt(val)+'円</span>';
-    yearlyHtml+='</div>';
-    yearlyHtml+='<div style="height:8px;border-radius:4px;background:var(--bg3);overflow:hidden;">';
-    yearlyHtml+='<div style="height:100%;width:'+barW+'%;border-radius:4px;background:'+tc+';"></div>';
-    yearlyHtml+='</div></div>';
-  }
-  document.getElementById('detail-yearly').innerHTML=yearlyHtml;
+  const y = byYear(ss);
+  document.getElementById('detail-yearly').innerHTML = barRows(Object.keys(y).sort().map(k => ({label: k + '年', v: y[k], text: yen(y[k]) + '円'})));
 }
 
-function renderRanking(){
-  var rankClass=['gold','silver','bronze'];
-  var html='';
-  for(var i=0;i<players.length;i++){
-    var p=players[i];
-    var rc=rankClass[i]||'';
-    var tc=playerTotals[p]>=0?'#1D9E75':'#D85A30';
-    html+='<div class="rank-row" data-player="'+p+'" onclick="showDetail(this.dataset.player)">';
-    html+='<div class="rank-num '+rc+'">'+(i+1)+'</div>';
-    html+='<div class="rank-avatar" style="background:'+col(p)+'22;color:'+col(p)+'">'+p[0]+'</div>';
-    html+='<div class="rank-info"><div class="rank-name">'+p+'</div><div class="rank-detail">'+playerSessionCount[p]+'セッション · 平均'+avgRank(p)+'位</div></div>';
-    html+='<div class="rank-score"><div class="rank-score-val" style="color:'+tc+'">'+fmt(playerTotals[p])+'</div><div class="rank-score-sub">円</div></div>';
-    html+='</div>';
-  }
-  document.getElementById('ranking-list').innerHTML=html;
+// ---------- 直近成績 ----------
+const recentState = {n: 10, unit: 'game', sort: 'pay'};
+function bindSeg(id, key, cast) {
+  document.getElementById(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    e.currentTarget.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    recentState[key] = cast ? cast(b.dataset.v) : b.dataset.v;
+    renderRecent();
+  });
+}
+bindSeg('recent-n', 'n', Number); bindSeg('recent-unit', 'unit'); bindSeg('recent-sort', 'sort');
 
-  var dateLabels=[...new Set(allData.map(function(d){return d.date;}))].sort();
-  var legendHtml='';
-  for(var i=0;i<players.length;i++){
-    legendHtml+='<span class="legend-item"><span class="legend-dot" style="background:'+col(players[i])+'"></span>'+players[i]+'</span>';
-  }
-  document.getElementById('rank-legend').innerHTML=legendHtml;
+function renderRecent() {
+  const {n, unit, sort} = recentState;
+  const unitLabel = unit === 'game' ? '半荘' : 'セッション';
+  const rows = Object.keys(P).map(p => {
+    let r;
+    if (unit === 'game') {
+      const g = n ? P[p].games.slice(-n) : P[p].games;
+      r = summarize(g); r.count = g.length; r.from = g.length ? g[0].date : '';
+    } else {
+      const s = n ? P[p].sessions.slice(-n) : P[p].sessions;
+      r = {pay: 0, chip: 0, rk: {1:0,2:0,3:0,4:0}, rsum: 0, count: s.length, from: s.length ? s[0].date : ''};
+      s.forEach(x => { r.pay += x.pay; r.chip += x.chip; r.rk[x.rank]++; r.rsum += x.rank; });
+      r.avg = r.count ? r.rsum / r.count : 0;
+    }
+    r.name = p; r.full = !n || r.count >= n;
+    return r;
+  });
+  const key = {pay: (a, b) => b.pay - a.pay, avg: (a, b) => a.avg - b.avg, chip: (a, b) => b.chip - a.chip}[sort];
+  rows.sort((a, b) => (b.full - a.full) || key(a, b));
 
-  var datasets=players.map(function(p){
-    var acc=0;
-    var data=dateLabels.map(function(date){
-      var s=null;
-      for(var j=0;j<allData.length;j++){
-        if(allData[j].date===date && allData[j].players.indexOf(p)>=0){s=allData[j];break;}
-      }
-      if(s) acc+=s.payouts[s.players.indexOf(p)];
-      return acc;
+  document.getElementById('recent-title').textContent = (n ? '直近' + n + unitLabel : '全期間') + 'の成績';
+  document.getElementById('recent-list').innerHTML = rows.map((r, i) => {
+    const short = !r.full;
+    return '<div class="row" style="' + (short ? 'opacity:0.55' : '') + '">' + rankNum(i) + avatar(r.name) +
+      '<div class="info"><div class="name">' + esc(r.name) + '</div>' +
+      '<div class="sub num">' + r.count + unitLabel + (short ? '（不足）' : '') + ' · 平均' + r.avg.toFixed(2) + ' · トップ' + pct(r.rk[1], r.count) + '% · ラス' + pct(r.rk[4], r.count) + '%</div></div>' +
+      '<div class="right"><div class="amount num ' + cls(r.pay) + '">' + yen(r.pay) + '<small>円</small></div>' + chipPill(r.chip) + '</div></div>';
+  }).join('');
+  document.getElementById('recent-note').textContent = n
+    ? '各プレイヤー本人の直近' + n + unitLabel + 'で集計しています。' + n + unitLabel + 'に満たないプレイヤーは薄く表示し、下にまとめています。'
+      + (unit === 'game' ? 'チップはセッション単位の記録のため、そのセッションの1半荘目が範囲に入っている場合に加算しています。' : '')
+    : '全期間の成績です。';
+}
+
+// ---------- 推移 ----------
+const legendState = {};
+function topPlayers(k) {
+  return Object.keys(P).sort((a, b) => P[b].sessions.length - P[a].sessions.length).slice(0, k);
+}
+function renderLegend(id, chartId) {
+  const vis = legendState[chartId];
+  document.getElementById(id).innerHTML = players.map(p =>
+    '<button data-p="' + esc(p) + '" class="' + (vis.has(p) ? '' : 'off') + '"><span class="dot" style="background:' + col(p) + '"></span>' + esc(p) + '</button>').join('');
+}
+function applyLegend(chartId) {
+  const c = charts[chartId], vis = legendState[chartId];
+  c.data.datasets.forEach(d => d.hidden = !vis.has(d.label));
+  c.update();
+  renderLegend('trend-legend', chartId);
+}
+document.getElementById('trend-legend').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const vis = legendState.trendChart;
+  vis.has(b.dataset.p) ? vis.delete(b.dataset.p) : vis.add(b.dataset.p);
+  applyLegend('trendChart');
+});
+document.querySelector('[data-legend-all]').addEventListener('click', () => { legendState.trendChart = new Set(players); applyLegend('trendChart'); });
+document.querySelector('[data-legend-top]').addEventListener('click', () => { legendState.trendChart = new Set(topPlayers(6)); applyLegend('trendChart'); });
+
+function renderTrend() {
+  legendState.trendChart = legendState.trendChart || new Set(topPlayers(6));
+  const labels = DATA.map(s => s.date.slice(2));
+  const datasets = players.map(p => {
+    let acc = 0;
+    const data = DATA.map(s => {
+      const i = s.players.indexOf(p);
+      if (i < 0) return null;
+      return acc += s.pay[i];
     });
-    return {label:p,data:data,borderColor:col(p),backgroundColor:'transparent',tension:0.3,pointRadius:3,borderWidth:2};
+    return {label: p, data, borderColor: col(p), backgroundColor: col(p), tension: 0.25, pointRadius: 2, borderWidth: 2, spanGaps: true, hidden: !legendState.trendChart.has(p)};
   });
-
-  var ctx=document.getElementById('rankChart').getContext('2d');
-  if(window._rc) window._rc.destroy();
-  window._rc=new Chart(ctx,{
-    type:'line',
-    data:{labels:dateLabels.map(function(d){return d.slice(5);}),datasets:datasets},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return v.toLocaleString();}}}}}
+  makeChart('trendChart', {
+    type: 'line', data: {labels, datasets},
+    options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'nearest', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {callbacks: {label: c => c.dataset.label + ' ' + yen(c.parsed.y) + '円'}}},
+      scales: {y: yenAxis, x: {ticks: dateTicks}}}
   });
-}
+  renderLegend('trend-legend', 'trendChart');
 
-function renderTrend(){
-  var dateLabels=[...new Set(allData.map(function(d){return d.date;}))].sort();
-  var legendHtml='';
-  for(var i=0;i<players.length;i++){
-    legendHtml+='<span class="legend-item"><span class="legend-dot" style="background:'+col(players[i])+'"></span>'+players[i]+'</span>';
-  }
-  document.getElementById('trend-legend').innerHTML=legendHtml;
-
-  var datasets=players.map(function(p){
-    var acc=0;
-    var data=dateLabels.map(function(date){
-      var s=null;
-      for(var j=0;j<allData.length;j++){
-        if(allData[j].date===date && allData[j].players.indexOf(p)>=0){s=allData[j];break;}
-      }
-      if(s){acc+=s.payouts[s.players.indexOf(p)];return acc;}
-      return null;
-    });
-    return {label:p,data:data,borderColor:col(p),backgroundColor:'transparent',tension:0.3,pointRadius:3,borderWidth:2,spanGaps:true};
-  });
-
-  var ctx1=document.getElementById('trendChart').getContext('2d');
-  if(window._tc) window._tc.destroy();
-  window._tc=new Chart(ctx1,{
-    type:'line',
-    data:{labels:dateLabels.map(function(d){return d.slice(5);}),datasets:datasets},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return v.toLocaleString();}}}}}
-  });
-
-  var ctx2=document.getElementById('sessionChart').getContext('2d');
-  if(window._sc) window._sc.destroy();
-  window._sc=new Chart(ctx2,{
-    type:'bar',
-    data:{
-      labels:allData.map(function(d){return d.date.slice(5);}),
-      datasets:[
-        {label:'最高収支',data:allData.map(function(d){return Math.max.apply(null,d.payouts);}),backgroundColor:'rgba(29,158,117,0.5)'},
-        {label:'最低収支',data:allData.map(function(d){return Math.min.apply(null,d.payouts);}),backgroundColor:'rgba(216,90,48,0.5)'}
-      ]
-    },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return v.toLocaleString();}}}}}
+  makeChart('sessionChart', {
+    type: 'bar',
+    data: {labels, datasets: [
+      {label: '最高収支', data: DATA.map(s => Math.max(...s.pay)), backgroundColor: css('--green') + 'aa', borderRadius: 2},
+      {label: '最低収支', data: DATA.map(s => Math.min(...s.pay)), backgroundColor: css('--red') + 'aa', borderRadius: 2}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: yenAxis, x: {stacked: true, ticks: dateTicks}}}
   });
 }
 
-function renderStats(){
-  var rankClass=['gold','silver','bronze'];
-  var html='';
-  for(var i=0;i<players.length;i++){
-    var p=players[i];
-    var rc=rankClass[i]||'';
-    var tc=playerTotals[p]>=0?'#1D9E75':'#D85A30';
-    html+='<div class="rank-row">';
-    html+='<div class="rank-num '+rc+'">'+(i+1)+'</div>';
-    html+='<div class="rank-avatar" style="background:'+col(p)+'22;color:'+col(p)+'">'+p[0]+'</div>';
-    html+='<div class="rank-info"><div class="rank-name">'+p+'</div><div class="rank-detail">🥇'+rankRate(p,1)+'% 🥈'+rankRate(p,2)+'% 🥉'+rankRate(p,3)+'% 💀'+rankRate(p,4)+'% · 飛'+tobiRate(p)+'%</div></div>';
-    html+='<div class="rank-score"><div class="rank-score-val" style="color:'+tc+'">'+fmt(playerTotals[p])+'</div><div class="rank-score-sub">円</div></div>';
-    html+='</div>';
-  }
-  document.getElementById('stats-list').innerHTML=html;
+// ---------- 統計 ----------
+function renderStats() {
+  document.getElementById('stats-list').innerHTML = players.map((p, i) => {
+    const a = ALL[p];
+    return '<div class="row">' + rankNum(i) + avatar(p) +
+      '<div class="info"><div class="name">' + esc(p) + '</div><div class="sub num">🥇' + pct(a.rk[1], a.n) + '% 🥈' + pct(a.rk[2], a.n) + '% 🥉' + pct(a.rk[3], a.n) + '% 💀' + pct(a.rk[4], a.n) + '% · 飛' + pct(a.tobi, a.n) + '%</div></div>' +
+      '<div class="right"><div class="amount num">' + a.avg.toFixed(2) + '<small>位</small></div><div class="sub">' + a.n + '半荘</div></div></div>';
+  }).join('');
 
-  var ctx3=document.getElementById('winChart').getContext('2d');
-  if(window._wc) window._wc.destroy();
-  window._wc=new Chart(ctx3,{
-    type:'bar',
-    data:{
-      labels:players,
-      datasets:[
-        {label:'🥇1位',data:players.map(function(p){return rankRate(p,1);}),backgroundColor:'rgba(186,117,23,0.85)',borderRadius:3},
-        {label:'🥈2位',data:players.map(function(p){return rankRate(p,2);}),backgroundColor:'rgba(136,135,128,0.75)',borderRadius:3},
-        {label:'🥉3位',data:players.map(function(p){return rankRate(p,3);}),backgroundColor:'rgba(153,60,29,0.65)',borderRadius:3},
-        {label:'💀4位',data:players.map(function(p){return rankRate(p,4);}),backgroundColor:'rgba(90,90,90,0.45)',borderRadius:3}
-      ]
-    },
-    options:{
-      responsive:true,maintainAspectRatio:false,indexAxis:'y',
-      plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12}}},
-      scales:{
-        x:{stacked:true,max:100,ticks:{callback:function(v){return v+'%';}}},
-        y:{stacked:true}
-      }
-    }
+  const chips = players.slice().sort((a, b) => ALL[b].chip - ALL[a].chip);
+  document.getElementById('chip-stats').innerHTML = barRows(chips.map(p => ({label: p, v: ALL[p].chip, text: sgn(ALL[p].chip) + '枚'})), e => col(e.label));
+
+  const h = Math.max(220, players.length * 24 + 70);
+  document.getElementById('winChartWrap').style.height = h + 'px';
+  document.getElementById('avgChartWrap').style.height = h + 'px';
+  const rateSet = (r, label, color) => ({label, data: players.map(p => pct(ALL[p].rk[r], ALL[p].n)), backgroundColor: color, borderRadius: 2});
+  makeChart('winChart', {
+    type: 'bar',
+    data: {labels: players, datasets: [rateSet(1, '1着', css('--green')), rateSet(2, '2着', css('--silver') + 'aa'), rateSet(3, '3着', css('--silver') + '66'), rateSet(4, '4着', css('--red'))]},
+    options: {responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: {legend: {position: 'bottom', labels: {boxWidth: 12}}, tooltip: {callbacks: {label: c => c.dataset.label + ' ' + c.parsed.x + '%'}}},
+      scales: {x: {stacked: true, max: 100, ticks: {callback: v => v + '%'}}, y: {stacked: true}}}
   });
-
-  var ctx4=document.getElementById('avgRankChart').getContext('2d');
-  if(window._ac) window._ac.destroy();
-  window._ac=new Chart(ctx4,{
-    type:'bar',
-    data:{
-      labels:players,
-      datasets:[{label:'平均順位',data:players.map(function(p){return parseFloat(avgRank(p));}),backgroundColor:players.map(function(p){return col(p)+'99';}),borderRadius:4}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{min:1,max:4,ticks:{callback:function(v){return v+'位';}}}}}
-  });
-
-  // チップ統計
-  var chipHtml='';
-  var sorted_chip=players.slice().sort(function(a,b){return playerChips[b]-playerChips[a];});
-  for(var i=0;i<sorted_chip.length;i++){
-    var p=sorted_chip[i];
-    var chips=playerChips[p];
-    var pct=Math.max(0,Math.min(100,Math.abs(chips)/Math.max.apply(null,sorted_chip.map(function(q){return Math.abs(playerChips[q]);}||1))*100));
-    chipHtml+='<div style="margin-bottom:10px;">';
-    chipHtml+='<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">';
-    chipHtml+='<span style="font-weight:600;color:'+col(p)+'">'+p+'</span>';
-    chipHtml+='<span style="font-weight:600;color:'+(chips>=0?'var(--green)':'var(--red)')+'">'+fmtS(chips)+'枚</span>';
-    chipHtml+='</div>';
-    chipHtml+='<div style="height:8px;border-radius:4px;background:var(--bg3);overflow:hidden;">';
-    chipHtml+='<div style="height:100%;width:'+pct+'%;border-radius:4px;background:'+(chips>=0?'var(--green)':'var(--red)')+';"></div>';
-    chipHtml+='</div></div>';
-  }
-  document.getElementById('chip-stats').innerHTML=chipHtml;
-}
-
-function renderYearly(){
-  // 年度別ランキングテーブル
-  var html='';
-  for(var yi=0;yi<years.length;yi++){
-    var year=years[yi];
-    var ydata=yearlyData[year];
-    var yplayers=Object.keys(ydata).sort(function(a,b){return ydata[b]-ydata[a];});
-    html+='<div style="margin-bottom:1.5rem;">';
-    html+='<div style="font-size:13px;font-weight:600;color:var(--text3);letter-spacing:0.06em;margin-bottom:8px;">'+year+'年</div>';
-    for(var pi=0;pi<yplayers.length;pi++){
-      var p=yplayers[pi];
-      var val=ydata[p];
-      var tc=val>=0?'var(--green)':'var(--red)';
-      html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:13px;">';
-      html+='<span style="display:flex;align-items:center;gap:8px;">';
-      html+='<span style="width:28px;height:28px;border-radius:50%;background:'+col(p)+'22;color:'+col(p)+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">'+p[0]+'</span>';
-      html+='<span style="font-weight:600;color:var(--text)">'+p+'</span></span>';
-      html+='<span style="font-weight:600;color:'+tc+'">'+fmt(val)+'円</span>';
-      html+='</div>';
-    }
-    html+='</div>';
-  }
-  document.getElementById('yearly-content').innerHTML=html;
-
-  // 年度別グラフ
-  var ctx=document.getElementById('yearlyChart').getContext('2d');
-  if(window._yc) window._yc.destroy();
-  window._yc=new Chart(ctx,{
-    type:'bar',
-    data:{
-      labels:years.map(function(y){return y+'年';}),
-      datasets:players.map(function(p){
-        return{
-          label:p,
-          data:years.map(function(y){return yearlyData[y]&&yearlyData[y][p]?yearlyData[y][p]:0;}),
-          backgroundColor:col(p)+'99',
-          borderRadius:4
-        };
-      })
-    },
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{
-        x:{stacked:false},
-        y:{ticks:{callback:function(v){return v.toLocaleString();}}}
-      }
-    }
+  const byAvg = players.slice().sort((a, b) => ALL[a].avg - ALL[b].avg);
+  makeChart('avgRankChart', {
+    type: 'bar',
+    data: {labels: byAvg, datasets: [{data: byAvg.map(p => +ALL[p].avg.toFixed(2)), backgroundColor: byAvg.map(p => col(p) + 'bb'), borderRadius: 3}]},
+    options: {responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: {legend: {display: false}}, scales: {x: {min: 1, max: 4, ticks: {callback: v => v + '位'}}}}
   });
 }
 
-function renderHistory(){
-  var sorted=allData.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
-  var html='';
-  for(var i=0;i<sorted.length;i++){
-    var sess=sorted[i];
-    var maxP=Math.max.apply(null,sess.payouts);
-    var minP=Math.min.apply(null,sess.payouts);
-    html+='<div class="history-card">';
-    html+='<div class="history-header"><span class="history-date">'+sess.date+'</span><span class="history-games">'+sess.games+'局 · '+sess.players.join('/')+'</span></div>';
-    html+='<div class="history-body">';
-    for(var j=0;j<sess.players.length;j++){
-      var p=sess.players[j];
-      var pay=sess.payouts[j];
-      var payColor=pay>=0?'#1D9E75':'#D85A30';
-      var badge='';
-      if(pay===maxP) badge='<span class="badge badge-top">TOP</span>';
-      else if(pay===minP) badge='<span class="badge badge-bot">LAST</span>';
-      html+='<div class="history-row">';
-      html+='<span style="color:'+col(p)+';font-weight:600;font-size:13px">'+p+'</span>';
-      html+='<span style="color:#9b9b97">スコア '+fmtS(sess.scores[j])+'</span>';
-      html+='<span style="color:'+payColor+';font-weight:600">'+fmt(pay)+'円'+badge+'</span>';
-      html+='</div>';
-    }
-    html+='</div></div>';
-  }
-  document.getElementById('history-list').innerHTML=html;
+// ---------- 年度別 ----------
+function renderYearly() {
+  const y = {};
+  DATA.forEach(s => { const k = s.date.slice(0, 4); y[k] = y[k] || {}; s.players.forEach((p, i) => y[k][p] = (y[k][p] || 0) + s.pay[i]); });
+  document.getElementById('yearly-content').innerHTML = Object.keys(y).sort().reverse().map(k => {
+    const ps = Object.keys(y[k]).sort((a, b) => y[k][b] - y[k][a]);
+    return '<div class="year-block"><div class="year-title">' + k + '年</div><div class="list">' + ps.map((p, i) =>
+      '<div class="row">' + rankNum(i) + avatar(p, 30) + '<div class="info"><div class="name" style="font-size:14px">' + esc(p) + '</div></div><div class="right"><div class="amount num ' + cls(y[k][p]) + '" style="font-size:15px">' + yen(y[k][p]) + '<small>円</small></div></div></div>').join('') + '</div></div>';
+  }).join('');
+}
+
+// ---------- 履歴 ----------
+function renderHistory() {
+  document.getElementById('history-list').innerHTML = DATA.slice().reverse().map(s => {
+    const maxP = Math.max(...s.pay), minP = Math.min(...s.pay);
+    const order = s.players.map((p, i) => i).sort((a, b) => s.pay[b] - s.pay[a]);
+    return '<div class="history-card"><div class="history-header"><span class="d num">' + s.date + '</span><span class="g">' + s.games.length + '半荘</span></div><div class="history-body">' +
+      order.map(i => {
+        const p = s.players[i], pay = s.pay[i];
+        const badge = pay === maxP ? '<span class="badge badge-top">TOP</span>' : pay === minP ? '<span class="badge badge-bot">LAST</span>' : '';
+        return '<div class="history-row"><span style="color:' + col(p) + ';font-weight:700">' + esc(p) + badge + '</span>' +
+          '<span class="s num">スコア ' + sgn(s.sc[i]) + ' · チップ ' + sgn(s.chips[i]) + '</span>' +
+          '<span class="num ' + cls(pay) + '" style="font-weight:700;text-align:right;min-width:72px">' + yen(pay) + '円</span></div>';
+      }).join('') + '</div></div>';
+  }).join('');
 }
 
 renderRanking();
+// ダークモード切替時はグラフを描き直す
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  Object.keys(rendered).forEach(k => rendered[k] = false);
+  const active = document.querySelector('.tab.active').dataset.page;
+  if (active !== 'ranking') showPage(active);
+});
 </script>
 </body>
 </html>
